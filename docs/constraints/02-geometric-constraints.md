@@ -27,13 +27,15 @@ Examples:
 - Kitchen.area >= minimumArea
 - LivingRoom.area >= minimumArea
 
+All area values are in **mm²** (integer, derived from stored geometry).
+
 Represent all three where useful:
 
 ```typescript
 {
-  minArea: 100,
-  targetArea: 140,
-  maxArea: 200
+  minArea: 100000000,    // 100 m²
+  targetArea: 140000000, // 140 m²
+  maxArea: 200000000     // 200 m²
 }
 ```
 

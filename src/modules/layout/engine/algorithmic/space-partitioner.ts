@@ -4,19 +4,19 @@ import { Rect } from '../model';
 import { labelFor } from '../room-registry';
 
 export interface BoundsLike {
-  minM2: number;
-  idealM2: number;
-  maxM2: number;
+  minMm2: number;
+  idealMm2: number;
+  maxMm2: number;
 }
 
 export interface PlannedRoom extends BoundsLike {
   type: string;
   label: string;
-  minSideM: number;
+  minSideMm: number;
   bedIndex?: number;
   attachedBedType?: string;
   parkingCars?: number;
-  counterMinM?: number;
+  counterMinMm?: number;
 }
 
 export interface FloorPlan {
@@ -28,8 +28,8 @@ export interface FloorPlan {
 
 export interface StairReservation {
   rect: Rect;
-  widthM: number;
-  depthM: number;
+  widthMm: number;
+  depthMm: number;
 }
 
 export interface Plan {
@@ -45,12 +45,14 @@ export interface PlacedRoom extends Rect {
   label: string;
   level: number;
   planIndex: number;
-  areaTargetM2: number;
-  minSideM: number;
+  areaTargetMm2: number;
+  minSideMm: number;
   bedIndex?: number;
 }
 
 export type LevelRooms = PlacedRoom[][];
+
+const SNAP_EPSILON = 1e-3;
 
 function sum(values: number[]): number {
   return values.reduce((acc, value) => acc + value, 0);
@@ -60,23 +62,23 @@ function fitAreas(bounds: BoundsLike[], available: number): number[] | null {
   if (bounds.length === 0) {
     return [];
   }
-  const totalMin = sum(bounds.map((b) => b.minM2));
-  const totalMax = sum(bounds.map((b) => b.maxM2));
-  if (totalMin > available + 1e-6) {
+  const totalMin = sum(bounds.map((b) => b.minMm2));
+  const totalMax = sum(bounds.map((b) => b.maxMm2));
+  if (totalMin > available + SNAP_EPSILON) {
     return null;
   }
-  const initial = bounds.map((b) => Math.min(b.maxM2, Math.max(b.minM2, b.idealM2)));
-  if (sum(initial) <= available + 1e-6) {
+  const initial = bounds.map((b) => Math.min(b.maxMm2, Math.max(b.minMm2, b.idealMm2)));
+  if (sum(initial) <= available + SNAP_EPSILON) {
     return initial;
   }
-  if (totalMax < available - 1e-6) {
+  if (totalMax < available - SNAP_EPSILON) {
     return null;
   }
-  const headroom = bounds.map((b) => Math.max(0, b.maxM2 - b.minM2));
+  const headroom = bounds.map((b) => Math.max(0, b.maxMm2 - b.minMm2));
   const headroomTotal = sum(headroom);
   const surplus = available - totalMin;
   return bounds.map((b, index) =>
-    Math.min(b.maxM2, b.minM2 + (surplus * headroom[index]) / Math.max(1e-9, headroomTotal)),
+    Math.min(b.maxMm2, b.minMm2 + (surplus * headroom[index]) / Math.max(1e-9, headroomTotal)),
   );
 }
 
@@ -147,15 +149,21 @@ function partitionLeaf(
 
   const aspectPenalty = (ratio: number): number => (ratio < 1 ? 1 / ratio : ratio);
 
+  const vertical = rect.width >= rect.depth;
+  const span = vertical ? rect.width : rect.depth;
+
   const candidates: number[] = [];
   let bestScore = Number.POSITIVE_INFINITY;
   for (let k = 1; k < groups.length; k += 1) {
     const leftShare = prefix[k] / total;
-    const vertical = rect.width >= rect.depth;
-    const leftWidth = vertical ? rect.width * leftShare : rect.width;
-    const leftDepth = vertical ? rect.depth : rect.depth * leftShare;
-    const rightWidth = vertical ? rect.width * (1 - leftShare) : rect.width;
-    const rightDepth = vertical ? rect.depth : rect.depth * (1 - leftShare);
+    const split = Math.round(span * leftShare);
+    if (split < 1 || span - split < 1) {
+      continue;
+    }
+    const leftWidth = vertical ? split : rect.width;
+    const leftDepth = vertical ? rect.depth : split;
+    const rightWidth = vertical ? rect.width - split : rect.width;
+    const rightDepth = vertical ? rect.depth : rect.depth - split;
     const score =
       aspectPenalty(leftWidth / leftDepth) * leftShare +
       aspectPenalty(rightWidth / rightDepth) * (1 - leftShare);
@@ -176,24 +184,13 @@ function partitionLeaf(
   }
 
   const bestIndex = candidates[Math.floor(chooseTie() * candidates.length)];
-  const leftShare = prefix[bestIndex] / total;
-  const vertical = rect.width >= rect.depth;
+  const split = Math.round((span * prefix[bestIndex]) / total);
   const leftRect: Rect = vertical
-    ? { x: rect.x, y: rect.y, width: rect.width * leftShare, depth: rect.depth }
-    : { x: rect.x, y: rect.y, width: rect.width, depth: rect.depth * leftShare };
+    ? { x: rect.x, y: rect.y, width: split, depth: rect.depth }
+    : { x: rect.x, y: rect.y, width: rect.width, depth: split };
   const rightRect: Rect = vertical
-    ? {
-        x: rect.x + rect.width * leftShare,
-        y: rect.y,
-        width: rect.width * (1 - leftShare),
-        depth: rect.depth,
-      }
-    : {
-        x: rect.x,
-        y: rect.y + rect.depth * leftShare,
-        width: rect.width,
-        depth: rect.depth * (1 - leftShare),
-      };
+    ? { x: rect.x + split, y: rect.y, width: rect.width - split, depth: rect.depth }
+    : { x: rect.x, y: rect.y + split, width: rect.width, depth: rect.depth - split };
 
   const leftResult = partitionLeaf(leftRect, groups.slice(0, bestIndex), chooseTie);
   const rightResult = partitionLeaf(rightRect, groups.slice(bestIndex), chooseTie);
@@ -211,13 +208,13 @@ function expandGroup(rect: Rect, group: PartitionGroup, areas: number[]): Rect[]
   const hostArea = areas[hostIndex];
   const ensuiteArea = areas[ensuiteIndex];
   if (rect.depth < rect.width) {
-    const hostDepth = rect.depth * (hostArea / (hostArea + ensuiteArea));
+    const hostDepth = Math.round(rect.depth * (hostArea / (hostArea + ensuiteArea)));
     return [
       { x: rect.x, y: rect.y, width: rect.width, depth: hostDepth },
       { x: rect.x, y: rect.y + hostDepth, width: rect.width, depth: rect.depth - hostDepth },
     ];
   }
-  const hostWidth = rect.width * (hostArea / (hostArea + ensuiteArea));
+  const hostWidth = Math.round(rect.width * (hostArea / (hostArea + ensuiteArea)));
   return [
     { x: rect.x, y: rect.y, width: hostWidth, depth: rect.depth },
     { x: rect.x + hostWidth, y: rect.y, width: rect.width - hostWidth, depth: rect.depth },
@@ -228,17 +225,17 @@ function autoLiving(): PlannedRoom {
   return {
     type: 'living',
     label: labelFor('living'),
-    minM2: 12,
-    idealM2: 18,
-    maxM2: 30,
-    minSideM: 3.0,
+    minMm2: 12_000_000,
+    idealMm2: 18_000_000,
+    maxMm2: 30_000_000,
+    minSideMm: 3000,
   };
 }
 
 export function buildPlan(req: GenerationRequest): Plan {
-  const plotWidth = req.plot.widthM;
-  const plotDepth = req.plot.depthM;
-  const wall = req.wallThicknessM;
+  const plotWidth = req.plot.widthMm;
+  const plotDepth = req.plot.depthMm;
+  const wall = req.wallThicknessMm;
 
   const footprint: Rect =
     req.maxCoverage !== null && req.maxCoverage > 0 && req.maxCoverage < 1
@@ -255,8 +252,8 @@ export function buildPlan(req: GenerationRequest): Plan {
     throw new UnsolvableLayoutError('Plot too small to host walls', [
       {
         constraint: 'PLOT_SIZE',
-        expected: `usable width/depth > 0 with wall=${wall.toFixed(3)}m`,
-        actual: `${usable.width.toFixed(2)} x ${usable.depth.toFixed(2)} m`,
+        expected: `usable width/depth > 0 with wall=${wall}mm`,
+        actual: `${usable.width} x ${usable.depth} mm`,
         hint: 'Use a larger plot or a thinner wall template',
       },
     ]);
@@ -265,9 +262,9 @@ export function buildPlan(req: GenerationRequest): Plan {
   const stairs = req.floors > 1 ? req.staircase : null;
   const partitionRect: Rect = stairs
     ? {
-        x: usable.x + stairs.widthM,
+        x: usable.x + stairs.widthMm,
         y: usable.y,
-        width: usable.width - stairs.widthM,
+        width: usable.width - stairs.widthMm,
         depth: usable.depth,
       }
     : usable;
@@ -289,12 +286,12 @@ export function buildPlan(req: GenerationRequest): Plan {
     ? {
         rect: {
           x: usable.x,
-          y: usable.y + usable.depth - Math.min(stairs.depthM, usable.depth),
-          width: stairs.widthM,
-          depth: Math.min(stairs.depthM, usable.depth),
+          y: usable.y + usable.depth - Math.min(stairs.depthMm, usable.depth),
+          width: stairs.widthMm,
+          depth: Math.min(stairs.depthMm, usable.depth),
         },
-        widthM: stairs.widthM,
-        depthM: stairs.depthM,
+        widthMm: stairs.widthMm,
+        depthMm: stairs.depthMm,
       }
     : null;
 
@@ -309,10 +306,10 @@ function buildGroundRooms(req: GenerationRequest): PlannedRoom[] {
       rooms.push({
         type: 'parking',
         label: `Parking ${i + 1}`,
-        minM2: 12.5,
-        idealM2: 16,
-        maxM2: 25,
-        minSideM: 2.4,
+        minMm2: 12_500_000,
+        idealMm2: 16_000_000,
+        maxMm2: 25_000_000,
+        minSideMm: 2400,
         parkingCars: 1,
       });
     }
@@ -329,10 +326,10 @@ function buildGroundRooms(req: GenerationRequest): PlannedRoom[] {
     rooms.push({
       type: 'dining',
       label: labelFor('dining'),
-      minM2: 9,
-      idealM2: 12,
-      maxM2: 18,
-      minSideM: 2.4,
+      minMm2: 9_000_000,
+      idealMm2: 12_000_000,
+      maxMm2: 18_000_000,
+      minSideMm: 2400,
     });
   }
   if (hasKitchen) {
@@ -340,8 +337,8 @@ function buildGroundRooms(req: GenerationRequest): PlannedRoom[] {
       type: 'kitchen',
       label: labelFor('kitchen'),
       ...boundsOf(req.kitchen),
-      minSideM: 2.1,
-      counterMinM: req.kitchen.counterMinM,
+      minSideMm: 2100,
+      counterMinMm: req.kitchen.counterMinMm,
     });
   }
 
@@ -366,10 +363,10 @@ function buildGroundRooms(req: GenerationRequest): PlannedRoom[] {
     rooms.push({
       type: 'bath',
       label: i === 0 ? 'Family Bathroom' : `Bathroom ${i + 1}`,
-      minM2: 2.4,
-      idealM2: 3.6,
-      maxM2: 6,
-      minSideM: 1.5,
+      minMm2: 2_400_000,
+      idealMm2: 3_600_000,
+      maxMm2: 6_000_000,
+      minSideMm: 1500,
     });
   }
 
@@ -378,8 +375,8 @@ function buildGroundRooms(req: GenerationRequest): PlannedRoom[] {
   return rooms;
 }
 
-function boundsOf(spec: { minM2: number; idealM2: number; maxM2: number }): BoundsLike {
-  return { minM2: spec.minM2, idealM2: spec.idealM2, maxM2: spec.maxM2 };
+function boundsOf(spec: { minMm2: number; idealMm2: number; maxMm2: number }): BoundsLike {
+  return { minMm2: spec.minMm2, idealMm2: spec.idealMm2, maxMm2: spec.maxMm2 };
 }
 
 function isBedroomType(type: string): boolean {
@@ -391,33 +388,34 @@ function isBedroomType(type: string): boolean {
 function specToPlanned(spec: {
   type: string;
   count: number;
-  minM2: number;
-  idealM2: number;
-  maxM2: number;
+  minMm2: number;
+  idealMm2: number;
+  maxMm2: number;
+  minSideMm: number;
 }): PlannedRoom {
   return {
     type: spec.type,
     label: labelFor(spec.type),
-    minM2: spec.minM2,
-    idealM2: spec.idealM2,
-    maxM2: spec.maxM2,
-    minSideM: 1.8,
+    minMm2: spec.minMm2,
+    idealMm2: spec.idealMm2,
+    maxMm2: spec.maxMm2,
+    minSideMm: spec.minSideMm,
   };
 }
 
 function pushBedrooms(
   target: PlannedRoom[],
-  spec: { type: string; count: number; minM2: number; idealM2: number; maxM2: number },
+  spec: { type: string; count: number; minMm2: number; idealMm2: number; maxMm2: number },
 ): void {
   const beds: PlannedRoom[] = [];
   for (let i = 0; i < spec.count; i += 1) {
     beds.push({
       type: spec.type,
       label: labelFor(spec.type),
-      minM2: spec.minM2,
-      idealM2: spec.idealM2,
-      maxM2: spec.maxM2,
-      minSideM: 3.0,
+      minMm2: spec.minMm2,
+      idealMm2: spec.idealMm2,
+      maxMm2: spec.maxMm2,
+      minSideMm: 3000,
       bedIndex: beds.length,
     });
   }
@@ -429,10 +427,10 @@ function pushWc(target: PlannedRoom[], req: GenerationRequest, ordinal: number):
     target.push({
       type: 'wc',
       label: ordinal === 0 && i === 0 ? 'W.C.' : `W.C. ${i + 1}`,
-      minM2: 1.2,
-      idealM2: 1.8,
-      maxM2: 3,
-      minSideM: 1.0,
+      minMm2: 1_200_000,
+      idealMm2: 1_800_000,
+      maxMm2: 3_000_000,
+      minSideMm: 1000,
     });
   }
 }
@@ -461,10 +459,10 @@ function buildUpperRooms(req: GenerationRequest, level: number): PlannedRoom[] {
       rooms.push({
         type: 'bath',
         label: `${bed.label} - Ensuite`,
-        minM2: 2.4,
-        idealM2: 3.6,
-        maxM2: 5,
-        minSideM: 1.5,
+        minMm2: 2_400_000,
+        idealMm2: 3_600_000,
+        maxMm2: 5_000_000,
+        minSideMm: 1500,
         attachedBedType: bed.type + (bed.bedIndex ?? 0),
       });
     }
@@ -477,7 +475,7 @@ function buildUpperRooms(req: GenerationRequest, level: number): PlannedRoom[] {
 
 function floorFootprint(plotWidth: number, plotDepth: number, maxCoverage: number): Rect {
   const targetDepth = (maxCoverage * plotWidth * plotDepth) / plotWidth;
-  const depth = Math.min(plotDepth, Math.max(2.4, targetDepth));
+  const depth = Math.min(plotDepth, Math.max(2400, Math.round(targetDepth)));
   return {
     x: 0,
     y: plotDepth - depth,
@@ -490,14 +488,15 @@ export function partitionAll(plan: Plan, chooseTie: () => number): LevelRooms {
   const levels: LevelRooms = [];
   for (const floor of plan.floors) {
     const bounds = floor.rooms;
-    const areas = fitAreas(bounds, floor.partitionRect.width * floor.partitionRect.depth);
+    const partitionArea = floor.partitionRect.width * floor.partitionRect.depth;
+    const areas = fitAreas(bounds, partitionArea);
     if (areas === null) {
       throw new UnsolvableLayoutError(
         `Floor "floor-${floor.floorNumber}" cannot fit its minimum room areas`,
         bounds.map((room) => ({
           constraint: 'MIN_AREA',
           room: room.type,
-          expected: `>= ${room.minM2}m2`,
+          expected: `>= ${room.minMm2}mm2`,
           actual: areaText(room, floor.partitionRect),
           hint: 'Reduce room sizes, floors, or parking requirement',
         })),
@@ -533,8 +532,8 @@ export function partitionAll(plan: Plan, chooseTie: () => number): LevelRooms {
           label: room.label,
           level: floor.floorNumber,
           planIndex: index,
-          areaTargetM2: areas[index],
-          minSideM: room.minSideM,
+          areaTargetMm2: areas[index],
+          minSideMm: room.minSideMm,
           bedIndex: room.bedIndex,
         });
       }
@@ -545,21 +544,21 @@ export function partitionAll(plan: Plan, chooseTie: () => number): LevelRooms {
 }
 
 function aspectRatioBalanced(room: BoundsLike, rect: Rect): string {
-  return `ideal ${room.idealM2}m2 in ${rect.width.toFixed(2)}x${rect.depth.toFixed(2)}m cell`;
+  return `ideal ${room.idealMm2}mm2 in ${rect.width}x${rect.depth}mm cell`;
 }
 
 function areaText(room: BoundsLike, rect: Rect): string {
-  return `ideal ${room.idealM2}m2 in ${rect.width.toFixed(2)}x${rect.depth.toFixed(2)}m`;
+  return `ideal ${room.idealMm2}mm2 in ${rect.width}x${rect.depth}mm`;
 }
 
 function shrinkToArea(rect: Rect, area: number): Rect {
   const rectArea = rect.width * rect.depth;
   const scale = Math.sqrt(area / rectArea);
-  const width = rect.width * scale;
-  const depth = rect.depth * scale;
+  const width = Math.max(1, Math.round(rect.width * scale));
+  const depth = Math.max(1, Math.round(rect.depth * scale));
   return {
-    x: rect.x + (rect.width - width) / 2,
-    y: rect.y + (rect.depth - depth) / 2,
+    x: rect.x + Math.round((rect.width - width) / 2),
+    y: rect.y + Math.round((rect.depth - depth) / 2),
     width,
     depth,
   };
@@ -576,7 +575,7 @@ export function stairRoomsFor(plan: Plan): PlacedRoom[] {
     label: 'Staircase',
     level: floor.floorNumber,
     planIndex: -1,
-    areaTargetM2: plan.stair!.rect.width * plan.stair!.rect.depth,
-    minSideM: plan.stair!.widthM,
+    areaTargetMm2: plan.stair!.rect.width * plan.stair!.rect.depth,
+    minSideMm: plan.stair!.widthMm,
   }));
 }

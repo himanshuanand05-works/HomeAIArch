@@ -10,12 +10,13 @@ class-validator/class-transformer, @nestjs/swagger, Jest + Supertest + fast-chec
 ---
 
 ## 0. Conventions Used
+
 - Endpoints: REST under `/api/v1`. Response envelope not used; HTTP status +
   uniform error body (SRS §6.3).
 - All DTOs validated by the global `ValidationPipe` (whitelist, forbidNonWhitelisted).
 - Determinism: all pseudo-randomness injected via a seedable RNG.
-- Money/units: `BigDecimal`-free; numbers are plain JS numbers in v1 (areas ≤
-  6 significant digits, fine for m²). Never do percent math on currency (none in v1).
+- Money/units: `BigDecimal`-free; integer mm for all dimensions, mm² for areas
+  (ADR-0005). Never do percent math on currency (none in v1).
 - Errors: thrown as `DomainError` subclasses carrying a stable `code` from
   `ErrorCode` enum; mapped to HTTP in a global exception filter.
 
@@ -91,10 +92,10 @@ model Plot {
   id      String @id @default(uuid())
   ownerId String
   owner   User   @relation(...)
-  widthM  Float          // normalized meters
-  depthM  Float
+  widthMm  Int             // normalized integer mm (ADR-0005)
+  depthMm  Int
   unit    Unit   @default(M)   // unit the user entered
-  widthRaw  Float           // as entered
+  widthRaw  Float           // as entered (display/debug only)
   depthRaw  Float
   openSides Int   @default(3) // 1..4 — plot context (FR-3.2)
   createdAt DateTime @default(now())
@@ -109,13 +110,13 @@ model DesignTemplate {
   region    String?           // "IN", "IN-South", ...
   version   Int    @default(1)
   isActive  Boolean @default(true)
-  wallThicknessM Float        // e.g., 0.2286 (9" brick)
+  wallThicknessMm Int          // e.g., 229 (9" brick)
   wallNote  String?           // "9\" brick"
   circulationRatio Float @default(0.08)
-  doorWidthM   Float @default(0.9)
-  staircase Json   // { widthM: 1.2, depthM: 2.4, landingM: 0.9 }
-  roomDefaults Json  // { "<roomType>": {minM2, idealM2, maxM2, minSideM, note} }
-  kitchenDefaults Json // { minM2, idealM2, maxM2, counterMinM }
+  doorWidthMm   Int @default(900)
+  staircase Json   // { widthMm: 1200, depthMm: 2400, landingMm: 900 }
+  roomDefaults Json  // { "<roomType>": {minM2, idealM2, maxM2, minSideMm, note} }
+  kitchenDefaults Json // { minM2, idealM2, maxM2, counterMinMm }
   bathDefaults Json // { ensuite: {minM2, idealM2}, common: {...}, wc: {...} }
   mandatoryDefaults Json // { attachedBathrooms: true, indoorParking: false, ... }
   createdAt DateTime @default(now())
@@ -131,8 +132,8 @@ model HomeProfile {
   template  DesignTemplate? @relation(...)
   templateSnapshot Json       // expanded template at creation/edit (FR-3.0)
   floors    Int          @default(1)          // 1..4
-  rooms     Json         // [{type, minM2, maxM2, idealM2, count, extras}]
-  kitchen   Json?        // {minM2, maxM2, idealM2, counterMinM}
+  rooms     Json         // [{type, count, minM2, idealM2, maxM2, minSideMm}]
+  kitchen   Json?        // {minM2, idealM2, maxM2, counterMinMm}
   bathConnectivity Json // { ensuite: true, common: 1, wcPerFloor: 1 }
   mandatoryRequirements Json // { openSides?, attachedBathrooms, indoorParking: {required, cars}, outdoorParking: {required, cars} }
   maxCoverage Float?     // 0..1
@@ -209,23 +210,26 @@ Prisma's `Json` is permissive; we enforce shape in the service layer.
 ## 3. Engine — Detailed Design
 
 ### 3.1 Port
+
 ```ts
 interface ILayoutGenerator {
   generate(req: GenerationRequest): GenerationResult;
 }
 ```
-- `GenerationRequest`: `{ plot: {widthM, depthM}, prefs: ValidatedPrefs, seed?: number, parent?: {layout: Layout, changeRequest?: ChangeRequest} }` — frozen input.
+
+- `GenerationRequest` (engine, integer mm): `{ plot: {widthMm, depthMm, openSides}, wallThicknessMm, doorWidthMm, staircase: {widthMm, depthMm}, circulationRatio, floors, rooms: {type, count, minMm2, idealMm2, maxMm2, minSideMm}[], kitchen: {minMm2, idealMm2, maxMm2, counterMinMm}, bathConnectivity, mandatory, maxCoverage, seed?, parent?: {layout: Layout, changeRequest?: ChangeRequest} }` — frozen input.
 - `GenerationResult`: `{ layout: Layout, metrics: Metrics, score: ScoreBreakdown, diagnostics: Diagnostic[] } | unsolvable → throws UnsolvableLayoutError with `ConstraintViolation[]` details`.
 
 ### 3.2 Algorithm (v1 — top-down space partition)
+
 1. **Expand inputs**: take the project's expanded profile snapshot: combine
    template defaults (wall thickness, room defaults, staircase, circulation)
-   with user overrides; build the *room list* incl. kitchen, bathrooms/W.C.s
+   with user overrides; build the _room list_ incl. kitchen, bathrooms/W.C.s
    (ensuite and common), parking if `indoorParking.required`, and stairs.
-2. **Wall ring**: inset the plot by `wallThicknessM` on each side → *usable
-   floor rect*. `builtUpM2` = outer footprint incl. the wall band (FR-5.2).
+2. **Wall ring**: inset the plot by `wallThicknessMm` on each side → _usable
+   floor rect_. `builtUpMm2` = outer footprint incl. the wall band (FR-5.2).
 3. **Stair column**: multi-floor → reserve one aligned stair rect
-   (`staircase {widthM, depthM}`, template) per floor at the same (x, y).
+   (`staircase {widthMm, depthMm}`, template) per floor at the same (x, y).
 4. **Floor assignment**: ground floor keeps entrance-facing rooms (living,
    kitchen, dining, parking, common bath), upper floors keep bedrooms + ensuite/
    wc. Ensuites split their bedroom block: carve the bath sub-rect from a corner
@@ -236,7 +240,7 @@ interface ILayoutGenerator {
    `area ≥ minM2` is preserved. Split axis by aspect ratio; seeded RNG only for
    ties (determinism guaranteed without seed).
 6. **Connectivity plug**: build the adjacency graph post-partition:
-   - doors/passages along shared edges (≥ `doorWidthM` overlap),
+   - doors/passages along shared edges (≥ `doorWidthMm` overlap),
    - every occupied floor connected via the stair column,
    - ensuite bath → host bedroom door; common bath & W.C. reachable,
    - `entrance` node on the plot side that is open (openSides) in v1.
@@ -248,13 +252,14 @@ interface ILayoutGenerator {
    latency budget; best score wins. No seed → deterministic default ordering.
 9. **Serialize**: validate again, then emit full-precision metrics. The 0.5 m
    grid snap is deferred to rendering time (see ADR-0004) so geometry stays
-   valid-by-construction (`Layout` fields are floats in meters).
+   valid-by-construction (`Layout` fields are integer mm, ADR-0005).
 
 > Phase 0 prototype deliberately omits dedicated corridor/passage rooms —
 > circulation is implicit via door connectivity — city standards refinement is
 > Phase 2 (scorer/passages).
 
 ### 3.3 Geometry Invariants (the checker enforces; property-tested)
+
 - All room rects within the usable floor rect (inside the wall ring).
 - No two rects overlap by more than tolerance (shared-wall edge contact allowed).
 - Every room has ≥ 1 connection; graph from entrance is connected.
@@ -265,6 +270,7 @@ interface ILayoutGenerator {
   area ≥ parking default when `indoorParking.required`.
 
 ### 3.4 Iteration semantics
+
 - Parent layout is passed in; change request `delta` may contain:
   - `resizeRoom {roomId, targetM2}` → turns into per-room hard/soft override;
   - `moveRoom {roomId, toFloor}` / `swapRooms {a, b}`;
@@ -279,15 +285,15 @@ interface ILayoutGenerator {
 
 ## 4. Services & Responsibilities
 
-| Service | Responsibility |
-|---|---|
-| `UsersService` | create/fetch/deactivate users; profile assembly (FR-1). |
-| `PlotsService` | validate + normalize dims/units + openSides; CRUD (FR-2). |
-| `TemplatesService` | list/read seeded design templates (FR-3.0). |
-| `ProfilesService` | get/update home profiles; Zod validation of Json shapes; expands template defaults into the profile; returns `ValidatedPrefs` domain object (FR-3). |
-| `ProjectsService` | create (freeze plot+chosen profile snapshots), list, rename, soft-delete (FR-4). |
-| `LayoutService` | orchestrates: takes `GenerationRequest` → calls port → persist version; reads version; prepares iteration request from parent + delta (FR-5, FR-6). |
-| `FeedbackService` | validate + persist feedback and tags; history queries (FR-7). |
+| Service            | Responsibility                                                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UsersService`     | create/fetch/deactivate users; profile assembly (FR-1).                                                                                             |
+| `PlotsService`     | validate + normalize dims/units + openSides; CRUD (FR-2).                                                                                           |
+| `TemplatesService` | list/read seeded design templates (FR-3.0).                                                                                                         |
+| `ProfilesService`  | get/update home profiles; Zod validation of Json shapes; expands template defaults into the profile; returns `ValidatedPrefs` domain object (FR-3). |
+| `ProjectsService`  | create (freeze plot+chosen profile snapshots), list, rename, soft-delete (FR-4).                                                                    |
+| `LayoutService`    | orchestrates: takes `GenerationRequest` → calls port → persist version; reads version; prepares iteration request from parent + delta (FR-5, FR-6). |
+| `FeedbackService`  | validate + persist feedback and tags; history queries (FR-7).                                                                                       |
 
 Rule: services talk to persistence only through repositories; the engine module
 is dependency-inverted (`LayoutService` depends on `ILayoutGenerator`, not on
@@ -301,60 +307,67 @@ the algorithmic impl).
 > `limit`/`cursor` on list endpoints.
 
 ### 5.1 Users
-| Method/Path | Body/Ok |
-|---|---|
-| `POST /api/v1/users` | `{email, name}` → `201 {id, email, name}` |
-| `GET /api/v1/users/:id/profile` | → `{id, email, name, homeProfiles: []}` |
+
+| Method/Path                     | Body/Ok                                   |
+| ------------------------------- | ----------------------------------------- |
+| `POST /api/v1/users`            | `{email, name}` → `201 {id, email, name}` |
+| `GET /api/v1/users/:id/profile` | → `{id, email, name, homeProfiles: []}`   |
 
 ### 5.2 Plots
-| Method/Path | Notes |
-|---|---|
-| `POST /api/v1/plots` | `{ownerId, width, depth, unit, openSides?}` → `201 Plot` |
-| `PATCH /api/v1/plots/:id` | partial `{width?, depth?, unit?, openSides?}` |
-| `GET /api/v1/plots/:id` | → normalized + raw dims |
+
+| Method/Path               | Notes                                                    |
+| ------------------------- | -------------------------------------------------------- |
+| `POST /api/v1/plots`      | `{ownerId, width, depth, unit, openSides?}` → `201 Plot` |
+| `PATCH /api/v1/plots/:id` | partial `{width?, depth?, unit?, openSides?}`            |
+| `GET /api/v1/plots/:id`   | → normalized + raw dims                                  |
 
 Validation: `3 ≤ side ≤ 200 m` after normalization (config constant);
 `openSides` in 1..4.
 
 ### 5.3 Templates
-| Method/Path | Notes |
-|---|---|
-| `GET /api/v1/templates` | list active region standards |
+
+| Method/Path                 | Notes                                                 |
+| --------------------------- | ----------------------------------------------------- |
+| `GET /api/v1/templates`     | list active region standards                          |
 | `GET /api/v1/templates/:id` | full defaults (wall, rooms, kitchen, bath, mandatory) |
 
 ### 5.4 Home Profiles
-| Method/Path | Notes |
-|---|---|
-| `POST /api/v1/profiles` | `{ownerId, name, templateId?, floors?, rooms?, kitchen?, bathConnectivity?, mandatoryRequirements?, maxCoverage?, focus?}` → expands template defaults + overrides ✓ |
-| `GET /api/v1/profiles?ownerId=` | list |
-| `GET /api/v1/profiles/:id` | full expanded profile |
-| `PATCH /api/v1/profiles/:id` | partial section updates |
+
+| Method/Path                     | Notes                                                                                                                                                                |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/profiles`         | `{ownerId, name, templateId?, floors?, rooms?, kitchen?, bathConnectivity?, mandatoryRequirements?, maxCoverage?, focus?}` → expands template defaults + overrides ✓ |
+| `GET /api/v1/profiles?ownerId=` | list                                                                                                                                                                 |
+| `GET /api/v1/profiles/:id`      | full expanded profile                                                                                                                                                |
+| `PATCH /api/v1/profiles/:id`    | partial section updates                                                                                                                                              |
 
 ### 5.5 Projects
-| Method/Path | Notes |
-|---|---|
-| `POST /api/v1/projects` | `{ownerId, plotId, name, homeProfileId}` — snapshots chosen profile (explicit choice, FR-3.6) |
-| `GET /api/v1/projects?ownerId=&status=` | list |
-| `GET /api/v1/projects/:id` | detail + latest version |
-| `PATCH /api/v1/projects/:id` | rename only (profile/plot immutable once created) |
-| `DELETE /api/v1/projects/:id` | soft delete |
+
+| Method/Path                             | Notes                                                                                         |
+| --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `POST /api/v1/projects`                 | `{ownerId, plotId, name, homeProfileId}` — snapshots chosen profile (explicit choice, FR-3.6) |
+| `GET /api/v1/projects?ownerId=&status=` | list                                                                                          |
+| `GET /api/v1/projects/:id`              | detail + latest version                                                                       |
+| `PATCH /api/v1/projects/:id`            | rename only (profile/plot immutable once created)                                             |
+| `DELETE /api/v1/projects/:id`           | soft delete                                                                                   |
 
 ### 5.6 Designs
-| Method/Path | Notes |
-|---|---|
-| `POST /api/v1/projects/:id/designs` | body `{seed?}` → generates v1; `201 DesignVersion + layout + metrics` |
-| `GET /api/v1/projects/:id/designs?limit=` | version history (v-number asc) |
-| `GET /api/v1/projects/:id/designs/:designId` | full version incl. snapshots + layout + metrics |
+
+| Method/Path                                              | Notes                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/projects/:id/designs`                      | body `{seed?}` → generates v1; `201 DesignVersion + layout + metrics`                                   |
+| `GET /api/v1/projects/:id/designs?limit=`                | version history (v-number asc)                                                                          |
+| `GET /api/v1/projects/:id/designs/:designId`             | full version incl. snapshots + layout + metrics                                                         |
 | `POST /api/v1/projects/:id/designs/:designId/iterations` | body `{changeRequest, seed?}` → child version; `201` incl. `diff` summary (rooms added/removed/resized) |
 
 Errors: `404 DESIGN_VERSION_NOT_FOUND`, `422 UNSOLVABLE_LAYOUT`, `400
 INVALID_CHANGE_REQUEST`.
 
 ### 5.7 Feedback
-| Method/Path | Notes |
-|---|---|
+
+| Method/Path                                            | Notes                                                   |
+| ------------------------------------------------------ | ------------------------------------------------------- |
 | `POST /api/v1/projects/:id/designs/:designId/feedback` | `{rating?, comment?, tags?, likes?, dislikes?}` → `201` |
-| `GET /api/v1/users/:id/feedback` | history list |
+| `GET /api/v1/users/:id/feedback`                       | history list                                            |
 
 ---
 
@@ -363,10 +376,10 @@ INVALID_CHANGE_REQUEST`.
 ```json
 {
   "schemaVersion": 1,
-  "unit": "meters",
-  "resolution": 0.5,
-  "wallThicknessM": 0.2286,
-  "plot": { "width": 12.0, "depth": 15.0, "openSides": 3 },
+  "unit": "mm",
+  "resolutionMm": 1,
+  "wallThicknessMm": 229,
+  "plot": { "widthMm": 12000, "depthMm": 15000, "openSides": 3 },
   "floors": [
     {
       "floorNumber": 0,
@@ -376,30 +389,40 @@ INVALID_CHANGE_REQUEST`.
           "roomId": "r1",
           "type": "living",
           "label": "Living Room",
-          "x": 0.0, "y": 0.0,
-          "width": 6.0, "depth": 4.5,
+          "x": 0,
+          "y": 0,
+          "width": 6000,
+          "depth": 4500,
           "level": 0,
+          "externalGeometry": { "x": -229, "y": -229, "width": 6344, "depth": 4844 },
+          "internalGeometry": { "x": 0, "y": 0, "width": 6000, "depth": 4500 },
+          "areaMm2": 27000000,
           "props": { "ensuiteBathId": null }
         }
       ]
     }
   ],
   "connections": [
-    { "id": "c1", "from": "entrance", "to": "r1", "kind": "door", "width": 0.9 },
-    { "id": "c2", "from": "r1", "to": "r2", "kind": "passage", "width": 1.0 },
-    { "id": "c3", "from": "r_up", "to": "r_down", "kind": "stair", "width": 1.0 }
+    { "id": "c1", "from": "entrance", "to": "r1", "kind": "door", "widthMm": 900 },
+    { "id": "c2", "from": "r1", "to": "r2", "kind": "passage", "widthMm": 1000 },
+    { "id": "c3", "from": "r_up", "to": "r_down", "kind": "stair", "widthMm": 1000 }
   ],
   "metrics": {
-    "builtUpAreaM2": 129.5,
-    "roomAreaM2": 120.1,
+    "builtUpAreaMm2": 129500000,
+    "roomAreaMm2": 120100000,
+    "circulationMm2": 9000000,
     "plotCoverage": 0.72,
     "score": 86.4,
     "scoreBreakdown": { "adjacency": 90, "orientation": 80, "balance": 88, "stability": 100 }
   }
 }
 ```
-`x/y/width/depth` are **inner room rectangles** (inside the wall band);
-`builtUpAreaM2` includes the wall band; `plotCoverage` = builtUp / plot area.
+
+`x/y/width/depth` are **inner room rectangles** (inside the wall band). Each room
+carries `externalGeometry` (wall-to-wall) and `internalGeometry` (occupiable);
+external is the band-inset, internal is what constraints reason about — the
+canonical DSL polygons are the target persistence (ADR-0005). `builtUpAreaMm2`
+includes the wall band; `plotCoverage` = builtUp / plot area; all areas in mm².
 Types registry: `living, dining, kitchen, bed1, bed2, ..., bath, wc, stair, lobby,
 study, store, utility, parking` (extensible enum in `common`).
 
@@ -429,13 +452,13 @@ study, store, utility, parking` (extensible enum in `common`).
 
 ## 9. Testing Strategy
 
-| Level | Scope / examples | Tool |
-|---|---|---|
-| Unit | partitioner, checker, scorer, serializer, services, validators | Jest |
-| Property | `forall` plots/prefs ⇒ invariants of §3.3 hold; determinism: same input+seed ⇒ deep-equal output | fast-check |
-| Integration | repo + engine bound together; DB-backed version-tree ops in a test Postgres | Jest + Prisma |
-| E2E | API flows (SRS FR scenarios): create user→plot→project→design→iterate→feedback | Supertest |
-| Contract | OpenAPI snapshot test keeps spec in sync | jest-openapi / swagger export diff |
+| Level       | Scope / examples                                                                                 | Tool                               |
+| ----------- | ------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| Unit        | partitioner, checker, scorer, serializer, services, validators                                   | Jest                               |
+| Property    | `forall` plots/prefs ⇒ invariants of §3.3 hold; determinism: same input+seed ⇒ deep-equal output | fast-check                         |
+| Integration | repo + engine bound together; DB-backed version-tree ops in a test Postgres                      | Jest + Prisma                      |
+| E2E         | API flows (SRS FR scenarios): create user→plot→project→design→iterate→feedback                   | Supertest                          |
+| Contract    | OpenAPI snapshot test keeps spec in sync                                                         | jest-openapi / swagger export diff |
 
 CI: lint + format check + typecheck + tests + build. Every PR touching the
 engine must include property tests for any new invariant.
@@ -443,6 +466,7 @@ engine must include property tests for any new invariant.
 ---
 
 ## 10. Future-Facing Seams (kept open, not built)
+
 - `ILayoutGenerator` allows an AI/optimization-based engine to replace the
   algorithmic one (validation layer unchanged).
 - Async generation: if p95 exceeds 5 s, wrap `LayoutService` behind a job queue;

@@ -5,16 +5,30 @@ import { sampleRequest } from './fixtures';
 const generator = new AlgorithmicLayoutGenerator({ maxRetries: 3, timeoutMs: 4000 });
 
 describe('AlgorithmicLayoutGenerator', () => {
-  it('produces a valid, scorable layout', () => {
+  it('produces a valid, scorable layout in integer mm with dual geometry', () => {
     const result = generator.generate(sampleRequest());
     expect(result.layout.floors.length).toBe(2);
+    expect(result.layout.unit).toBe('mm');
     expect(result.layout.metrics.score).toBeGreaterThan(0);
     expect(result.layout.connections.length).toBeGreaterThan(0);
     for (const floor of result.layout.floors) {
       expect(floor.rooms.length).toBeGreaterThan(0);
       for (const room of floor.rooms) {
         expect(room.roomId).toMatch(/^[a-z0-9_]+_f/);
-        expect(room.areaM2).toBeGreaterThan(0);
+        expect(room.areaMm2).toBeGreaterThan(0);
+        expect(Number.isInteger(room.x)).toBe(true);
+        expect(Number.isInteger(room.y)).toBe(true);
+        expect(Number.isInteger(room.width)).toBe(true);
+        expect(Number.isInteger(room.depth)).toBe(true);
+        expect(room.externalGeometry).toBeDefined();
+        expect(room.internalGeometry).toEqual({
+          x: room.x,
+          y: room.y,
+          width: room.width,
+          depth: room.depth,
+        });
+        expect(room.externalGeometry.width).toBeGreaterThanOrEqual(room.width);
+        expect(room.externalGeometry.depth).toBeGreaterThanOrEqual(room.depth);
       }
     }
   });
@@ -32,11 +46,11 @@ describe('AlgorithmicLayoutGenerator', () => {
   });
 
   it('throws UnsolvableLayoutError with reasons for impossible inputs', () => {
-    expect(() => generator.generate(sampleRequest({ plot: { widthM: 3, depthM: 3 } }))).toThrow(
-      UnsolvableLayoutError,
-    );
+    expect(() =>
+      generator.generate(sampleRequest({ plot: { widthMm: 3000, depthMm: 3000 } })),
+    ).toThrow(UnsolvableLayoutError);
     try {
-      generator.generate(sampleRequest({ plot: { widthM: 3, depthM: 3 } }));
+      generator.generate(sampleRequest({ plot: { widthMm: 3000, depthMm: 3000 } }));
     } catch (error) {
       expect(error).toBeInstanceOf(UnsolvableLayoutError);
       const unsolvable = error as UnsolvableLayoutError;
@@ -52,7 +66,16 @@ describe('AlgorithmicLayoutGenerator', () => {
         seed: 11,
         parent: baseResult,
         changeRequest: {
-          addRooms: [{ type: 'study', count: 1, minM2: 6, idealM2: 9, maxM2: 14 }],
+          addRooms: [
+            {
+              type: 'study',
+              count: 1,
+              minMm2: 6_000_000,
+              idealMm2: 9_000_000,
+              maxMm2: 14_000_000,
+              minSideMm: 2400,
+            },
+          ],
         },
       }),
     ).layout;

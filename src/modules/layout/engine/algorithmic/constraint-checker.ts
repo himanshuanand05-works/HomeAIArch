@@ -63,8 +63,8 @@ function placeholderRoom(id: string, type: string, label: string, level: number)
     label,
     level,
     planIndex: -1,
-    areaTargetM2: 0,
-    minSideM: 0,
+    areaTargetMm2: 0,
+    minSideMm: 0,
   };
 }
 
@@ -84,36 +84,36 @@ export function checkLayout(
 
     for (const room of placed) {
       const bounds = floorPlan.rooms[room.planIndex];
-      if (room.x < perimeter.x - 1e-3 || room.y < perimeter.y - 1e-3) {
+      if (room.x < perimeter.x - 1 || room.y < perimeter.y - 1) {
         collectViolations(
           violations,
           room,
           'IN_BOUNDS',
           `x>=${perimeter.x}, y>=${perimeter.y}`,
-          `x=${room.x.toFixed(2)}, y=${room.y.toFixed(2)}`,
+          `x=${room.x}, y=${room.y}`,
         );
       }
       if (
-        room.x + room.width > perimeter.x + perimeter.width + 1e-3 ||
-        room.y + room.depth > perimeter.y + perimeter.depth + 1e-3
+        room.x + room.width > perimeter.x + perimeter.width + 1 ||
+        room.y + room.depth > perimeter.y + perimeter.depth + 1
       ) {
         collectViolations(
           violations,
           room,
           'IN_BOUNDS',
-          `within ${perimeter.width.toFixed(2)}x${perimeter.depth.toFixed(2)}m box`,
-          `${room.width.toFixed(2)}x${room.depth.toFixed(2)}m`,
+          `within ${perimeter.width}x${perimeter.depth}mm box`,
+          `${room.width}x${room.depth}mm`,
         );
       }
 
       const actualArea = areaOf(room);
-      if (bounds && actualArea < bounds.minM2 - 1e-3) {
+      if (bounds && actualArea < bounds.minMm2 - 1) {
         collectViolations(
           violations,
           room,
           'MIN_AREA',
-          `>= ${bounds.minM2}m2`,
-          `${actualArea.toFixed(2)}m2`,
+          `>= ${bounds.minMm2}mm2`,
+          `${actualArea}mm2`,
           'Reduce the number or size of rooms, or use a larger plot',
         );
       }
@@ -141,7 +141,7 @@ export function checkLayout(
         continue;
       }
       const host = rooms.find((candidate) => bedKey(candidate) === bounds.attachedBedType);
-      if (host && contactLength(current, host) < req.doorWidthM) {
+      if (host && contactLength(current, host) < req.doorWidthMm) {
         collectViolations(
           violations,
           current,
@@ -178,7 +178,7 @@ export function checkLayout(
   }
 
   if (req.maxCoverage !== null) {
-    const plotArea = req.plot.widthM * req.plot.depthM;
+    const plotArea = req.plot.widthMm * req.plot.depthMm;
     const footprintArea = plan.footprint.width * plan.footprint.depth;
     const coverage = plotArea > 0 ? footprintArea / plotArea : 0;
     if (coverage > req.maxCoverage + 1e-6) {

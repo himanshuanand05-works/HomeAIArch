@@ -10,6 +10,7 @@
 ## 1. Introduction
 
 ### 1.1 Purpose
+
 HomeAIArch is a backend API that automatically generates home layout designs for
 a plot of land based on user-provided dimensions and preferences. It generates an
 initial layout, then iteratively adapts the layout in response to user feedback
@@ -17,7 +18,9 @@ and change requests, and persistently records user preferences, likes, and
 dislikes so future designs improve.
 
 ### 1.2 Scope
+
 In scope for v1 (see ROADMAP Phase 0–1):
+
 - User, plot, and project management.
 - Structured preference capture (floor count, room sizes, kitchen size, bathroom
   connectivity, etc.).
@@ -28,6 +31,7 @@ In scope for v1 (see ROADMAP Phase 0–1):
 - REST API + OpenAPI docs, persistence, validation, error taxonomy, tests.
 
 Out of scope for v1 (future):
+
 - Auth/OAuth beyond a minimal placeholder identity model.
 - Budget, cost, partial/phase-wise construction planning.
 - 3D rendering, preview images, SVG/PDF/DWG export.
@@ -35,27 +39,30 @@ Out of scope for v1 (future):
 - Multi-user real-time collaboration.
 
 ### 1.3 Audience
+
 This SRS is read by developers, AI coding agents joining the project, and the
 product owner. It is the requirements source of truth; HLD/LLD satisfy it.
 
 ### 1.4 Glossary
-| Term | Meaning |
-|---|---|
-| **Plot** | The empty land parcel: width, depth, unit, optional shape restrictions. v1 assumes orthogonal rectangles. |
-| **DesignTemplate** | A named bundle of regional/typical build standards (e.g., brick wall 9" thick, master bedroom ≥ 12×12 ft, kitchen counter ≥ 10 ft). Provides defaults; users may override every value. |
-| **HomeProfile** | A named, per-user collection of preferences built from a template and user choices (floors, rooms, bathrooms, mandatory requirements). Users may hold many and pick one when creating a project. |
-| **Mandatory requirements** | Plot/product context the user must give: open sides (1/2/3/4 side plot), need for attached bathrooms, indoor parking, etc. |
-| **Project** | A user's working context around one plot + one chosen HomeProfile, producing a series of design versions. |
-| **Preference** | Structured config describing desired rooms, sizes, floors, connectivity. |
-| **DesignVersion** | An immutable snapshot of plot + preferences + constraints producing one layout. The unit of review and iteration. |
-| **Layout (JSON)** | Machine-readable floor plan: floors, rooms with position/size, connections (doors/passages/stairs), derived metrics. |
-| **Iteration** | The act of generating a child DesignVersion from a parent plus a change request. |
-| **Change request** | Structured "delta" describing what to change vs the parent layout. |
-| **Feedback** | User opinions on a design: liked items, disliked items, rating, free text. |
-| **Hard constraint** | Must hold or the layout is invalid (e.g., plot fits, min room size). |
-| **Soft constraint** | Desirable; violations reduce a quality score but don't fail (e.g., prefer morning sun in bedrooms). |
+
+| Term                       | Meaning                                                                                                                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Plot**                   | The empty land parcel: width, depth, unit, optional shape restrictions. v1 assumes orthogonal rectangles.                                                                                        |
+| **DesignTemplate**         | A named bundle of regional/typical build standards (e.g., brick wall 9" thick, master bedroom ≥ 12×12 ft, kitchen counter ≥ 10 ft). Provides defaults; users may override every value.           |
+| **HomeProfile**            | A named, per-user collection of preferences built from a template and user choices (floors, rooms, bathrooms, mandatory requirements). Users may hold many and pick one when creating a project. |
+| **Mandatory requirements** | Plot/product context the user must give: open sides (1/2/3/4 side plot), need for attached bathrooms, indoor parking, etc.                                                                       |
+| **Project**                | A user's working context around one plot + one chosen HomeProfile, producing a series of design versions.                                                                                        |
+| **Preference**             | Structured config describing desired rooms, sizes, floors, connectivity.                                                                                                                         |
+| **DesignVersion**          | An immutable snapshot of plot + preferences + constraints producing one layout. The unit of review and iteration.                                                                                |
+| **Layout (JSON)**          | Machine-readable floor plan: floors, rooms with position/size, connections (doors/passages/stairs), derived metrics.                                                                             |
+| **Iteration**              | The act of generating a child DesignVersion from a parent plus a change request.                                                                                                                 |
+| **Change request**         | Structured "delta" describing what to change vs the parent layout.                                                                                                                               |
+| **Feedback**               | User opinions on a design: liked items, disliked items, rating, free text.                                                                                                                       |
+| **Hard constraint**        | Must hold or the layout is invalid (e.g., plot fits, min room size).                                                                                                                             |
+| **Soft constraint**        | Desirable; violations reduce a quality score but don't fail (e.g., prefer morning sun in bedrooms).                                                                                              |
 
 ### 1.5 References
+
 - `docs/HLD.md` — High-Level Design
 - `docs/LLD.md` — Low-Level Design
 - `docs/ROADMAP.md` — Phased release plan
@@ -67,6 +74,7 @@ product owner. It is the requirements source of truth; HLD/LLD satisfy it.
 ## 2. Overall Description
 
 ### 2.1 Product Perspective
+
 HomeAIArch is a greenfield, API-first backend. It will expose a REST API consumed
 by future web/mobile frontends or by users directly via OpenAPI. It owns all
 domain logic, persistence, and the layout generation engine. The generation
@@ -74,6 +82,7 @@ engine is algorithmic/constraint-based in v1, with a clean seam so an
 AI-assisted engine can be added later.
 
 ### 2.2 Product Functions (Summary)
+
 - Create and manage users (minimal identity; full auth in Phase 1).
 - Register plots with dimensions, units, and open-side info.
 - Browse built-in **design templates** (regional standards) and create named
@@ -88,6 +97,7 @@ AI-assisted engine can be added later.
 - Expose layout metrics (built-up area, plot coverage, score).
 
 ### 2.3 User Characteristics
+
 - **Homeowner/end user:** non-technical; provides plot size, picks/edits a home
   profile from regional templates, reviews layouts, requests changes.
 - **Developer/API consumer:** builds frontends; needs a stable, documented API.
@@ -95,10 +105,12 @@ AI-assisted engine can be added later.
   materials) in later phases.
 
 ### 2.4 Assumptions and Constraints
-1. Logical design works in `meters`; API accepts both metric and imperial and
-   normalizes internally to meters (grid resolution 0.5 m in v1).
+
+1. Logical design works in **integer millimetres (mm)**; API accepts metric and
+   imperial and normalizes to mm at the edge. Area stored as mm² (ADR-0005).
+   Phase 0 engine emits mm with dual external/internal geometry per ADR-0005.
 2. v1 plots are orthogonal rectangles only.
-3. Preferences are provided as *structured DTOs* on top of template-provided
+3. Preferences are provided as _structured DTOs_ on top of template-provided
    defaults, not free text, in v1.
 4. Every generated layout MUST be geometrically valid: rooms do not overlap,
    all rooms are within the plot, circulation is reachable.
@@ -116,17 +128,18 @@ AI-assisted engine can be added later.
     that a human reviewer finds plausible (accuracy), ahead of product polish.
 
 ### 2.5 In/Out of scope summary table
-| Capability | Phase 0/1 | Later |
-|---|---|---|
-| User, plot, project CRUD | Yes | — |
-| Design templates (regional standards) | Yes (seeded, user-configurable) | Template marketplace |
-| Home profiles (many per user, choose per project) | Yes | Households/shared profiles |
-| Structured preferences + mandatory requirements | Yes | Free-text/natural language |
-| Constraint-based layout gen | Basic → quality in Phase 2 | Advanced constraint solver, budget, phasing |
-| Iterative revision | Yes (change-request based) | Partial regeneration/diff-driven |
-| Feedback (likes/dislikes) | Yes (capture) | Adaptive recommendation/learning |
-| Auth | Placeholder identity; JWT in Phase 1 | Full auth + RBAC |
-| Export/rendering | No | SVG/PDF/DWG, 3D |
+
+| Capability                                        | Phase 0/1                            | Later                                       |
+| ------------------------------------------------- | ------------------------------------ | ------------------------------------------- |
+| User, plot, project CRUD                          | Yes                                  | —                                           |
+| Design templates (regional standards)             | Yes (seeded, user-configurable)      | Template marketplace                        |
+| Home profiles (many per user, choose per project) | Yes                                  | Households/shared profiles                  |
+| Structured preferences + mandatory requirements   | Yes                                  | Free-text/natural language                  |
+| Constraint-based layout gen                       | Basic → quality in Phase 2           | Advanced constraint solver, budget, phasing |
+| Iterative revision                                | Yes (change-request based)           | Partial regeneration/diff-driven            |
+| Feedback (likes/dislikes)                         | Yes (capture)                        | Adaptive recommendation/learning            |
+| Auth                                              | Placeholder identity; JWT in Phase 1 | Full auth + RBAC                            |
+| Export/rendering                                  | No                                   | SVG/PDF/DWG, 3D                             |
 
 ---
 
@@ -135,6 +148,7 @@ AI-assisted engine can be added later.
 > ID format `FR-x.y`. Priority: **M**=Must (v1), **S**=Should (soon), **C**=Could (later).
 
 ### FR-1 User Management (M)
+
 - FR-1.1 System SHALL create a user with a unique email and display name.
 - FR-1.2 System SHALL allow retrieving a user profile (including home profiles list).
 - FR-1.3 System SHALL allow deactivating a user (soft delete); data is retained for audit.
@@ -143,13 +157,16 @@ AI-assisted engine can be added later.
   and must be additive without breaking FR-1.1–1.3.
 
 ### FR-2 Plot Management (M)
+
 - FR-2.1 System SHALL register a plot with `width`, `depth`, measurement `unit`
   (`m`/`ft`), belonging to a user.
 - FR-2.2 System SHALL validate plot dimensions: positive, within configured
   min/max (e.g., min 3 m, max 200 m per side).
-- FR-2.3 System SHALL compute and store normalized dimensions in meters.
+- FR-2.3 System SHALL compute and store normalized dimensions in **integer mm**.
+  Imperial inputs converted to mm at the edge (ADR-0005).
 
 ### FR-3 Home Profiles & Templates (M)
+
 - FR-3.0 System SHALL ship a set of seeded `DesignTemplate`s, each bundling
   regional/typical standards that users generally follow, e.g.:
   - wall thickness (brick 9" = 0.2286 m, or 4.5"),
@@ -178,6 +195,7 @@ AI-assisted engine can be added later.
   load (explicit selection, no silent default).
 
 ### FR-4 Project Management (M)
+
 - FR-4.1 System SHALL create a Project bound to one Plot and one chosen
   **HomeProfile**; both shall be frozen into the project as immuturable
   snapshots (plot snapshot + expanded preference snapshot) at creation.
@@ -185,14 +203,15 @@ AI-assisted engine can be added later.
 - FR-4.3 System SHALL allow naming/renaming a project and deleting it (soft).
 
 ### FR-5 Initial Layout Generation (M)
+
 - FR-5.1 System SHALL, given a project, generate the first `DesignVersion`
   satisfying all **hard** constraints and optimizing **soft** ones.
 - FR-5.2 Output layout SHALL contain, as JSON:
   - floor plan geometry (x/y/width/depth for each room, inner room rectangles),
   - wall thickness used (from template/profile),
   - floors (number + name), each with rooms,
-  - each room: stable `roomId`, type, label, `x`,`y`,`width`,`depth` (meters, top-left origin), level,
-  - connections: list of `{from, to, kind: door|passage|stair, width}`,
+  - each room: stable `roomId`, type, label, `x`,`y`,`width`,`depth` (integer mm, top-left origin), level,
+  - connections: list of `{from, to, kind: door|passage|stair, widthMm}`,
   - derived metrics: total built-up area (incl. wall band), plot coverage %, quality score.
 - FR-5.3 Generation SHALL be deterministic unless a `seed` is supplied.
 - FR-5.4 If no valid layout exists, system SHALL return a structured
@@ -207,6 +226,7 @@ AI-assisted engine can be added later.
   daylight, parking consumes dedicated area on the ground floor.
 
 ### FR-6 Iterative Design Revision (M)
+
 - FR-6.1 System SHALL accept a change request against the latest (or any) version.
   A change request is a structured delta: room add/remove/resize/move,
   connection add/remove, preference override per room, coverage/floor adjustments.
@@ -218,6 +238,7 @@ AI-assisted engine can be added later.
   generation (valid geometry, deterministic).
 
 ### FR-7 Feedback Capture (M)
+
 - FR-7.1 System SHALL record feedback against a version: liking/dislike tags per
   room or global, overall rating (1–5), free-text comment.
 - FR-7.2 Feedback SHALL be stored with structured tags (e.g.,
@@ -228,6 +249,7 @@ AI-assisted engine can be added later.
   personalization features and audits).
 
 ### FR-8 Preference Learning (v1 = capture only; future = adapt)
+
 - FR-8.1 System SHALL persist every preference snapshot and every change request
   so a user's evolution over time is queryable.
 - FR-8.2 (future) System MAY derive and suggest preference adjustments from
@@ -237,36 +259,40 @@ AI-assisted engine can be added later.
 
 ## 4. Non-Functional Requirements
 
-| ID | Category | Requirement |
-|---|---|---|
-| NFR-1 | Performance | Read endpoints p95 < 200 ms; generation requests p95 < 5 s for typical plots (≤ 200 m², ≤ 3 floors). |
-| NFR-2 | Availability | 99.5% monthly availability during v1 (single region, modest scale). |
-| NFR-3 | Security | Secrets in env/config vault only, never in code; TLS at the edge; input validation on all inputs; no secrets in logs. |
-| NFR-4 | Data integrity | All writes transactional; versions immutable; audit trail of version creation. |
-| NFR-5 | Scalability | Generation engine must be stateless and horizontally scalable; layout computation is CPU-bound and must not hold DB locks. |
-| NFR-6 | Extensibility | New room types, constraint types, and preferences must be addable without schema rework where feasible (registry pattern). |
-| NFR-7 | Testing | Unit + integration coverage ≥ 70% on domain/engine; every engine change requires property-based geometry sanity tests (no overlaps, in-bounds). |
-| NFR-8 | Observability | Structured logs (JSON), request IDs, correlation of generation jobs, basic metrics (latency, error rate, generation success rate). |
-| NFR-9 | Determinism | Same inputs + seed ⇒ same output; engine must be pure w.r.t. inputs. |
-| NFR-10 | SEO/locale | All user-facing strings and labels localized; numeric units localized (v1: support m² standalone, layout in meters). |
+| ID     | Category       | Requirement                                                                                                                                      |
+| ------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| NFR-1  | Performance    | Read endpoints p95 < 200 ms; generation requests p95 < 5 s for typical plots (≤ 200 m², ≤ 3 floors).                                             |
+| NFR-2  | Availability   | 99.5% monthly availability during v1 (single region, modest scale).                                                                              |
+| NFR-3  | Security       | Secrets in env/config vault only, never in code; TLS at the edge; input validation on all inputs; no secrets in logs.                            |
+| NFR-4  | Data integrity | All writes transactional; versions immutable; audit trail of version creation.                                                                   |
+| NFR-5  | Scalability    | Generation engine must be stateless and horizontally scalable; layout computation is CPU-bound and must not hold DB locks.                       |
+| NFR-6  | Extensibility  | New room types, constraint types, and preferences must be addable without schema rework where feasible (registry pattern).                       |
+| NFR-7  | Testing        | Unit + integration coverage ≥ 70% on domain/engine; every engine change requires property-based geometry sanity tests (no overlaps, in-bounds).  |
+| NFR-8  | Observability  | Structured logs (JSON), request IDs, correlation of generation jobs, basic metrics (latency, error rate, generation success rate).               |
+| NFR-9  | Determinism    | Same inputs + seed ⇒ same output; engine must be pure w.r.t. inputs.                                                                             |
+| NFR-10 | SEO/locale     | All user-facing strings and labels localized; numeric units localized (v1: support m² standalone, layout in mm internally, meters/feet display). |
 
 ---
 
 ## 5. Data Requirements
 
 ### 5.1 Core Entities
+
 `User`, `Plot`, `DesignTemplate`, `HomeProfile`, `Project`, `DesignVersion`,
 `Layout` (JSON doc), `ChangeRequest` (JSON doc), `Feedback`, `FeedbackTag`.
 
 ### 5.2 Units
-- Linear: meters (API accepts `m`/`ft`, normalizes to meters).
-- Area: square meters (accepted input `m²`/`ft²`).
-- Grid resolution: **0.5 m** in v1 (positions/sizes round to multiples of
-  0.5 m). Phase 0 exception (ADR-0004): engine emits full-precision floats so
-  geometry stays valid by construction; snapping to the 0.5 m grid happens at
-  rendering/serialization time without affecting the stored layout.
+
+- Linear: integer **millimetres (mm)** internally (API accepts `m`/`ft` and
+  normalizes to mm at the edge).
+- Area: **mm²** derived from stored geometry; displayed as m².
+- Grid resolution: rendering/serialization concern only — ADR-0004 defers grid
+  snapping. ADR-0005 establishes mm-only storage + dual external/internal
+  geometry; the Phase 0 engine emits integer mm + dual external/internal
+  geometry.
 
 ### 5.3 Immutability
+
 `DesignVersion` rows and their `Layout` JSON are write-once. Any correction
 creates a new version.
 
@@ -275,31 +301,35 @@ creates a new version.
 ## 6. Interface Requirements
 
 ### 6.1 API Style
+
 REST over JSON, versioned at URL path (`/api/v1/...`). OpenAPI spec exposed at
 `/docs` (Swagger UI) and `/docs-json`. No WebSockets in v1.
 
 ### 6.2 High-level endpoint map (see LLD §0 for DTO details)
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/api/v1/users` | Create user (placeholder identity) |
-| GET | `/api/v1/users/:id/profile` | User profile + home profiles |
-| POST | `/api/v1/plots` | Register plot |
-| PATCH | `/api/v1/plots/:id` | Edit plot |
-| GET | `/api/v1/templates` | List design templates (regional standards) |
-| POST | `/api/v1/profiles` | Create home profile from a template |
-| GET | `/api/v1/profiles?userId=` | List a user's home profiles |
-| PATCH | `/api/v1/profiles/:id` | Update profile section(s) |
-| POST | `/api/v1/projects` | Create project (plot + chosen home profile, snapshotted) |
-| GET | `/api/v1/projects?userId=&status=` | List projects |
-| POST | `/api/v1/projects/:id/designs` | Generate initial design |
-| GET | `/api/v1/projects/:id/designs` | List version history |
-| GET | `/api/v1/projects/:id/designs/:designId` | Get layout JSON + metrics |
-| POST | `/api/v1/projects/:id/designs/:designId/iterations` | Apply a change request → next version |
-| POST | `/api/v1/projects/:id/designs/:designId/feedback` | Record feedback |
-| GET | `/api/v1/users/:id/feedback` | Feedback history |
+
+| Method | Path                                                | Purpose                                                  |
+| ------ | --------------------------------------------------- | -------------------------------------------------------- |
+| POST   | `/api/v1/users`                                     | Create user (placeholder identity)                       |
+| GET    | `/api/v1/users/:id/profile`                         | User profile + home profiles                             |
+| POST   | `/api/v1/plots`                                     | Register plot                                            |
+| PATCH  | `/api/v1/plots/:id`                                 | Edit plot                                                |
+| GET    | `/api/v1/templates`                                 | List design templates (regional standards)               |
+| POST   | `/api/v1/profiles`                                  | Create home profile from a template                      |
+| GET    | `/api/v1/profiles?userId=`                          | List a user's home profiles                              |
+| PATCH  | `/api/v1/profiles/:id`                              | Update profile section(s)                                |
+| POST   | `/api/v1/projects`                                  | Create project (plot + chosen home profile, snapshotted) |
+| GET    | `/api/v1/projects?userId=&status=`                  | List projects                                            |
+| POST   | `/api/v1/projects/:id/designs`                      | Generate initial design                                  |
+| GET    | `/api/v1/projects/:id/designs`                      | List version history                                     |
+| GET    | `/api/v1/projects/:id/designs/:designId`            | Get layout JSON + metrics                                |
+| POST   | `/api/v1/projects/:id/designs/:designId/iterations` | Apply a change request → next version                    |
+| POST   | `/api/v1/projects/:id/designs/:designId/feedback`   | Record feedback                                          |
+| GET    | `/api/v1/users/:id/feedback`                        | Feedback history                                         |
 
 ### 6.3 Error shape
+
 All errors return:
+
 ```
 {
   "statusCode": 400,
@@ -309,11 +339,13 @@ All errors return:
   "traceId": "..."
 }
 ```
+
 Codes are stable strings, not HTTP statuses — clients branch on `code`.
 
 ---
 
 ## 7. Future Scope (deliberately postponed)
+
 1. Budget & cost estimation per room/material.
 2. Construction phasing / partial development (build ground floor first).
 3. Constraint engine v2: advanced soft constraints and optimization.

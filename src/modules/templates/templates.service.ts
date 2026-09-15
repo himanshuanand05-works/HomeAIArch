@@ -9,10 +9,10 @@ export interface TemplateView {
   region: string | null;
   version: number;
   isActive: boolean;
-  wallThicknessM: number;
+  wallThicknessMm: number;
   wallNote: string | null;
   circulationRatio: number;
-  doorWidthM: number;
+  doorWidthMm: number;
   staircase: unknown;
   roomDefaults: unknown;
   kitchenDefaults: unknown;
@@ -47,10 +47,10 @@ export class TemplatesService {
     region: string | null;
     version: number;
     isActive: boolean;
-    wallThicknessM: number;
+    wallThicknessMm: number;
     wallNote: string | null;
     circulationRatio: number;
-    doorWidthM: number;
+    doorWidthMm: number;
     staircase: unknown;
     roomDefaults: unknown;
     kitchenDefaults: unknown;
@@ -64,10 +64,10 @@ export class TemplatesService {
       region: template.region,
       version: template.version,
       isActive: template.isActive,
-      wallThicknessM: template.wallThicknessM,
+      wallThicknessMm: template.wallThicknessMm,
       wallNote: template.wallNote,
       circulationRatio: template.circulationRatio,
-      doorWidthM: template.doorWidthM,
+      doorWidthMm: template.doorWidthMm,
       staircase: template.staircase,
       roomDefaults: template.roomDefaults,
       kitchenDefaults: template.kitchenDefaults,

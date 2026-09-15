@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConflictError, ResourceNotFoundError } from '../../common/errors/domain-errors';
-import { toMeters, LengthUnit } from '../../common/util/units';
+import { toMillimetres, LengthUnit } from '../../common/util/units';
 import { CreatePlotDto } from './dto/create-plot.dto';
 import { UpdatePlotDto } from './dto/update-plot.dto';
 
 export interface PlotView {
   id: string;
   ownerId: string;
-  widthM: number;
-  depthM: number;
+  widthMm: number;
+  depthMm: number;
   unit: LengthUnit;
   widthRaw: number;
   depthRaw: number;
@@ -23,15 +23,15 @@ export class PlotsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreatePlotDto): Promise<PlotView> {
-    const widthM = round3(toMeters(dto.width, dto.unit));
-    const depthM = round3(toMeters(dto.depth, dto.unit));
+    const widthMm = toMillimetres(dto.width, dto.unit);
+    const depthMm = toMillimetres(dto.depth, dto.unit);
 
     const duplicate = await this.prisma.plot.findUnique({
       where: {
-        ownerId_widthM_depthM: {
+        ownerId_widthMm_depthMm: {
           ownerId: dto.ownerId,
-          widthM,
-          depthM,
+          widthMm,
+          depthMm,
         },
       },
       select: { id: true },
@@ -43,8 +43,8 @@ export class PlotsService {
     const plot = await this.prisma.plot.create({
       data: {
         ownerId: dto.ownerId,
-        widthM,
-        depthM,
+        widthMm,
+        depthMm,
         unit: dto.unit,
         widthRaw: dto.width,
         depthRaw: dto.depth,
@@ -78,8 +78,8 @@ export class PlotsService {
     const plot = await this.prisma.plot.update({
       where: { id },
       data: {
-        widthM: round3(toMeters(width, unit)),
-        depthM: round3(toMeters(depth, unit)),
+        widthMm: toMillimetres(width, unit),
+        depthMm: toMillimetres(depth, unit),
         widthRaw: width,
         depthRaw: depth,
         unit,
@@ -97,8 +97,8 @@ export class PlotsService {
   private toView(plot: {
     id: string;
     ownerId: string;
-    widthM: number;
-    depthM: number;
+    widthMm: number;
+    depthMm: number;
     unit: LengthUnit;
     widthRaw: number;
     depthRaw: number;
@@ -109,8 +109,8 @@ export class PlotsService {
     return {
       id: plot.id,
       ownerId: plot.ownerId,
-      widthM: plot.widthM,
-      depthM: plot.depthM,
+      widthMm: plot.widthMm,
+      depthMm: plot.depthMm,
       unit: plot.unit,
       widthRaw: plot.widthRaw,
       depthRaw: plot.depthRaw,
@@ -119,8 +119,4 @@ export class PlotsService {
       updatedAt: plot.updatedAt,
     };
   }
-}
-
-function round3(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }

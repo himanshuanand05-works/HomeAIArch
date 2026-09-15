@@ -1,26 +1,104 @@
 export interface RoomKindDefaults {
   label: string;
-  minM2: number;
-  idealM2: number;
-  maxM2: number;
-  minSideM: number;
+  minMm2: number;
+  idealMm2: number;
+  maxMm2: number;
+  minSideMm: number;
 }
 
 export const ROOM_KIND_DEFAULTS: Record<string, RoomKindDefaults> = {
-  living: { label: 'Living Room', minM2: 12, idealM2: 18, maxM2: 30, minSideM: 3.0 },
-  dining: { label: 'Dining Area', minM2: 9, idealM2: 12, maxM2: 18, minSideM: 2.4 },
-  kitchen: { label: 'Kitchen', minM2: 7, idealM2: 10, maxM2: 16, minSideM: 2.1 },
-  bed1: { label: 'Master Bedroom', minM2: 13.4, idealM2: 18, maxM2: 30, minSideM: 3.3 },
-  bed2: { label: 'Bedroom 2', minM2: 10, idealM2: 14, maxM2: 22, minSideM: 3.0 },
-  bed3: { label: 'Bedroom 3', minM2: 9, idealM2: 12, maxM2: 18, minSideM: 2.8 },
-  bed4: { label: 'Bedroom 4', minM2: 8, idealM2: 10, maxM2: 15, minSideM: 2.4 },
-  bath: { label: 'Bathroom', minM2: 2.4, idealM2: 3.6, maxM2: 6, minSideM: 1.5 },
-  wc: { label: 'W.C.', minM2: 1.2, idealM2: 1.8, maxM2: 3, minSideM: 1.0 },
-  study: { label: 'Study', minM2: 6, idealM2: 9, maxM2: 14, minSideM: 2.4 },
-  store: { label: 'Store', minM2: 3, idealM2: 4.5, maxM2: 8, minSideM: 1.5 },
-  utility: { label: 'Utility', minM2: 4, idealM2: 6, maxM2: 10, minSideM: 2.0 },
-  lobby: { label: 'Lobby', minM2: 4, idealM2: 6, maxM2: 10, minSideM: 1.8 },
-  parking: { label: 'Parking', minM2: 12.5, idealM2: 16, maxM2: 25, minSideM: 2.4 },
+  living: {
+    label: 'Living Room',
+    minMm2: 12_000_000,
+    idealMm2: 18_000_000,
+    maxMm2: 30_000_000,
+    minSideMm: 3000,
+  },
+  dining: {
+    label: 'Dining Area',
+    minMm2: 9_000_000,
+    idealMm2: 12_000_000,
+    maxMm2: 18_000_000,
+    minSideMm: 2400,
+  },
+  kitchen: {
+    label: 'Kitchen',
+    minMm2: 7_000_000,
+    idealMm2: 10_000_000,
+    maxMm2: 16_000_000,
+    minSideMm: 2100,
+  },
+  bed1: {
+    label: 'Master Bedroom',
+    minMm2: 13_400_000,
+    idealMm2: 18_000_000,
+    maxMm2: 30_000_000,
+    minSideMm: 3300,
+  },
+  bed2: {
+    label: 'Bedroom 2',
+    minMm2: 10_000_000,
+    idealMm2: 14_000_000,
+    maxMm2: 22_000_000,
+    minSideMm: 3000,
+  },
+  bed3: {
+    label: 'Bedroom 3',
+    minMm2: 9_000_000,
+    idealMm2: 12_000_000,
+    maxMm2: 18_000_000,
+    minSideMm: 2800,
+  },
+  bed4: {
+    label: 'Bedroom 4',
+    minMm2: 8_000_000,
+    idealMm2: 10_000_000,
+    maxMm2: 15_000_000,
+    minSideMm: 2400,
+  },
+  bath: {
+    label: 'Bathroom',
+    minMm2: 2_400_000,
+    idealMm2: 3_600_000,
+    maxMm2: 6_000_000,
+    minSideMm: 1500,
+  },
+  wc: { label: 'W.C.', minMm2: 1_200_000, idealMm2: 1_800_000, maxMm2: 3_000_000, minSideMm: 1000 },
+  study: {
+    label: 'Study',
+    minMm2: 6_000_000,
+    idealMm2: 9_000_000,
+    maxMm2: 14_000_000,
+    minSideMm: 2400,
+  },
+  store: {
+    label: 'Store',
+    minMm2: 3_000_000,
+    idealMm2: 4_500_000,
+    maxMm2: 8_000_000,
+    minSideMm: 1500,
+  },
+  utility: {
+    label: 'Utility',
+    minMm2: 4_000_000,
+    idealMm2: 6_000_000,
+    maxMm2: 10_000_000,
+    minSideMm: 2000,
+  },
+  lobby: {
+    label: 'Lobby',
+    minMm2: 4_000_000,
+    idealMm2: 6_000_000,
+    maxMm2: 10_000_000,
+    minSideMm: 1800,
+  },
+  parking: {
+    label: 'Parking',
+    minMm2: 12_500_000,
+    idealMm2: 16_000_000,
+    maxMm2: 25_000_000,
+    minSideMm: 2400,
+  },
 };
 
 export function kindDefaultsFor(type: string): RoomKindDefaults | null {

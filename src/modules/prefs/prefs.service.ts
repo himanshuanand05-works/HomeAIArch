@@ -1,95 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { GenerationRequest } from '../layout/engine/generation-request';
-import { ChangeRequestSchema, ProfileRoomSpec, ProfileRoomSpecSchema } from './schemas';
+import { squareMetresToSquareMillimetres } from '../../common/util/units';
+import {
+  BathConnectivitySchema,
+  ChangeRequestSchema,
+  KitchenSpecSchema,
+  MandatoryRequirementsSchema,
+  PlotSnapshotSchema,
+  PrefsSnapshotSchema,
+  ProfileRoomSpec,
+  ProfileRoomSpecSchema,
+  TemplateSnapshotSchema,
+} from './schemas';
+import type { TemplateSnapshot, PlotSnapshot, PrefsSnapshot } from './schemas';
 
-const roomBoundsSchema = z.object({
-  minM2: z.number().positive(),
-  idealM2: z.number().positive(),
-  maxM2: z.number().positive(),
-  minSideM: z.number().positive(),
-});
+export type { TemplateSnapshot, PlotSnapshot, PrefsSnapshot } from './schemas';
 
-export const TemplateSnapshotSchema = z.object({
-  slug: z.string().min(1),
-  name: z.string().min(1),
-  region: z.string().nullable(),
-  wallNote: z.string().nullable(),
-  wallThicknessM: z.number().positive(),
-  circulationRatio: z.number().min(0).max(0.5),
-  doorWidthM: z.number().positive(),
-  staircase: z.object({ widthM: z.number().positive(), depthM: z.number().positive() }),
-  roomDefaults: z.record(z.string(), roomBoundsSchema),
-  kitchenDefaults: roomBoundsSchema.extend({ counterMinM: z.number().positive() }),
-  bathDefaults: z.object({
-    ensuite: roomBoundsSchema,
-    common: roomBoundsSchema,
-    wc: roomBoundsSchema,
-  }),
-  mandatoryDefaults: z.object({
-    attachedBathrooms: z.boolean(),
-    indoorParking: z.object({ required: z.boolean(), cars: z.number().int().min(0) }),
-    outdoorParking: z.object({ required: z.boolean(), cars: z.number().int().min(0) }),
-  }),
-});
+const GENERIC_ROOM_BOUNDS = { minM2: 6, idealM2: 9, maxM2: 15, minSideMm: 2000 };
 
-export type TemplateSnapshot = z.infer<typeof TemplateSnapshotSchema>;
-
-export const KitchenSpecSchema = z.object({
-  minM2: z.number().positive(),
-  idealM2: z.number().positive(),
-  maxM2: z.number().positive(),
-  counterMinM: z.number().positive(),
-});
-
-export const BathConnectivitySchema = z.object({
-  ensuite: z.boolean().default(true),
-  commonBaths: z.number().int().min(0).max(4).default(1),
-  wcPerFloor: z.number().int().min(0).max(2).default(1),
-});
-
-export const MandatoryRequirementsSchema = z.object({
-  attachedBathrooms: z.boolean().default(true),
-  indoorParking: z
-    .object({
-      required: z.boolean().default(false),
-      cars: z.number().int().min(0).max(4).default(0),
-    })
-    .default({ required: false, cars: 0 }),
-  outdoorParking: z
-    .object({
-      required: z.boolean().default(false),
-      cars: z.number().int().min(0).max(4).default(0),
-    })
-    .default({ required: false, cars: 0 }),
-});
-
+export type KitchenSpec = z.infer<typeof KitchenSpecSchema>;
+export type BathConnectivity = z.infer<typeof BathConnectivitySchema>;
 export type MandatoryRequirements = z.infer<typeof MandatoryRequirementsSchema>;
-
-export const PrefsSnapshotSchema = z.object({
-  floors: z.number().int().min(1).max(3),
-  rooms: z.array(ProfileRoomSpecSchema).min(1),
-  kitchen: KitchenSpecSchema,
-  bathConnectivity: BathConnectivitySchema,
-  mandatory: MandatoryRequirementsSchema,
-  maxCoverage: z.number().min(0).max(1).nullable().default(null),
-  template: TemplateSnapshotSchema,
-});
-
-export type PrefsSnapshot = z.infer<typeof PrefsSnapshotSchema>;
-
-export const PlotSnapshotSchema = z.object({
-  widthM: z.number().positive(),
-  depthM: z.number().positive(),
-  widthRaw: z.number().positive(),
-  depthRaw: z.number().positive(),
-  unit: z.enum(['M', 'FT']),
-  openSides: z.number().int().min(1).max(4),
-});
-
-export type PlotSnapshot = z.infer<typeof PlotSnapshotSchema>;
-
-const GENERIC_ROOM_BOUNDS = { minM2: 6, idealM2: 9, maxM2: 15, minSideM: 2 };
 
 export interface ProfileRoomInput {
   type: string;
@@ -97,14 +29,14 @@ export interface ProfileRoomInput {
   minM2?: number;
   idealM2?: number;
   maxM2?: number;
-  minSideM?: number;
+  minSideMm?: number;
 }
 
 export interface PrefsInput {
   floors: number;
   rooms: ProfileRoomInput[];
-  kitchen?: Partial<z.infer<typeof KitchenSpecSchema>>;
-  bathConnectivity?: Partial<z.infer<typeof BathConnectivitySchema>>;
+  kitchen?: Partial<KitchenSpec>;
+  bathConnectivity?: Partial<BathConnectivity>;
   mandatory?: Partial<MandatoryRequirements>;
   maxCoverage?: number | null;
 }
@@ -141,8 +73,8 @@ export class PrefsService {
     maxCoverage: unknown,
   ): {
     rooms: ProfileRoomSpec[];
-    kitchen: z.infer<typeof KitchenSpecSchema>;
-    bathConnectivity: z.infer<typeof BathConnectivitySchema>;
+    kitchen: KitchenSpec;
+    bathConnectivity: BathConnectivity;
     mandatory: MandatoryRequirements;
     maxCoverage: number | null;
   } {
@@ -162,7 +94,7 @@ export class PrefsService {
             minM2: input.kitchen.minM2,
             idealM2: input.kitchen.idealM2 ?? input.kitchen.minM2,
             maxM2: input.kitchen.maxM2 ?? input.kitchen.minM2,
-            counterMinM: input.kitchen.counterMinM ?? template.kitchenDefaults.counterMinM,
+            counterMinMm: input.kitchen.counterMinMm ?? template.kitchenDefaults.counterMinMm,
           }
         : template.kitchenDefaults;
 
@@ -200,7 +132,7 @@ export class PrefsService {
         minM2: room.minM2 ?? bounds.minM2,
         idealM2: room.idealM2 ?? bounds.idealM2,
         maxM2: room.maxM2 ?? bounds.maxM2,
-        minSideM: room.minSideM ?? bounds.minSideM,
+        minSideMm: room.minSideMm ?? bounds.minSideMm,
       });
       seen.add(room.type);
     }
@@ -230,21 +162,27 @@ export class PrefsService {
     overrides: GenerationOverrides = {},
   ): GenerationRequest {
     return {
-      plot: { widthM: plot.widthM, depthM: plot.depthM },
+      plot: { widthMm: plot.widthMm, depthMm: plot.depthMm },
       openSides: plot.openSides,
-      wallThicknessM: prefs.template.wallThicknessM,
+      wallThicknessMm: prefs.template.wallThicknessMm,
       circulationRatio: prefs.template.circulationRatio,
-      doorWidthM: prefs.template.doorWidthM,
+      doorWidthMm: prefs.template.doorWidthMm,
       staircase: prefs.template.staircase,
       floors: prefs.floors,
       rooms: prefs.rooms.map((room) => ({
         type: room.type,
         count: room.count,
-        minM2: room.minM2,
-        idealM2: room.idealM2,
-        maxM2: room.maxM2,
+        minMm2: squareMetresToSquareMillimetres(room.minM2),
+        idealMm2: squareMetresToSquareMillimetres(room.idealM2),
+        maxMm2: squareMetresToSquareMillimetres(room.maxM2),
+        minSideMm: room.minSideMm,
       })),
-      kitchen: prefs.kitchen,
+      kitchen: {
+        minMm2: squareMetresToSquareMillimetres(prefs.kitchen.minM2),
+        idealMm2: squareMetresToSquareMillimetres(prefs.kitchen.idealM2),
+        maxMm2: squareMetresToSquareMillimetres(prefs.kitchen.maxM2),
+        counterMinMm: prefs.kitchen.counterMinMm,
+      },
       bathConnectivity: prefs.bathConnectivity,
       mandatory: {
         attachedBathrooms: prefs.mandatory.attachedBathrooms,
@@ -263,7 +201,7 @@ export class PrefsService {
   private roomBoundsFor(
     template: TemplateSnapshot,
     type: string,
-  ): { minM2: number; idealM2: number; maxM2: number; minSideM: number } {
+  ): { minM2: number; idealM2: number; maxM2: number; minSideMm: number } {
     return template.roomDefaults[type] ?? GENERIC_ROOM_BOUNDS;
   }
 }

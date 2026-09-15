@@ -30,10 +30,10 @@ function touchSides(plan: Plan): { x: number; y: number; width: number; height: 
 
 function touchesOpenSide(plan: Plan, room: PlacedRoom): boolean {
   const frame = touchSides(plan);
-  const onBottom = Math.abs(room.y + room.depth - (frame.y + frame.height)) < 0.01;
-  const onLeft = Math.abs(room.x - frame.x) < 0.01;
-  const onRight = Math.abs(room.x + room.width - (frame.x + frame.width)) < 0.01;
-  const onTop = Math.abs(room.y - frame.y) < 0.01;
+  const onBottom = Math.abs(room.y + room.depth - (frame.y + frame.height)) < 1;
+  const onLeft = Math.abs(room.x - frame.x) < 1;
+  const onRight = Math.abs(room.x + room.width - (frame.x + frame.width)) < 1;
+  const onTop = Math.abs(room.y - frame.y) < 1;
   return onBottom || onLeft || onRight || onTop;
 }
 
@@ -49,7 +49,7 @@ function balanceScore(levels: LevelRooms, kitchen: GenerationRequest['kitchen'])
     penalty += dev;
     count += 1;
     if (room.type === 'kitchen') {
-      if (Math.max(room.width, room.depth) < kitchen.counterMinM) {
+      if (Math.max(room.width, room.depth) < kitchen.counterMinMm) {
         penalty += 0.3;
       }
     }
@@ -109,7 +109,7 @@ function stabilityScore(req: GenerationRequest, levels: LevelRooms): number {
   for (const floor of req.parent.floors) {
     const areas = new Map<string, number>();
     for (const room of floor.rooms) {
-      areas.set(room.type, (areas.get(room.type) ?? 0) + areaOf(room));
+      areas.set(room.type, (areas.get(room.type) ?? 0) + areaOf(room.internalGeometry));
     }
     parentByLevel.set(floor.floorNumber, areas);
   }
@@ -141,7 +141,7 @@ export function scoreLayout(
 ): ScoreBreakdown {
   return {
     balance: balanceScore(levels, req.kitchen),
-    adjacency: adjacencyScore(plan, levels, req.doorWidthM),
+    adjacency: adjacencyScore(plan, levels, req.doorWidthMm),
     orientation: orientationScore(plan, levels),
     stability: stabilityScore(req, levels),
   };

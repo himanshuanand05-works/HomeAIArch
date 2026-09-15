@@ -9,8 +9,10 @@ quality) early, and never block phase N+1 on speculative features.
 ---
 
 ## Phase 0 — Feasibility Prototype (accuracy first)
+
 **Goal: prove we CAN generate valid, plausible home layouts from preferences —
 the hard unknown — before building product polish.**
+
 - NestJS scaffold, strict TS, ESLint+Prettier, `lint/format/typecheck` scripts.
 - Prisma + PostgreSQL (docker compose), migrations, health checks; global
   validation + error filter (ErrorCode taxonomy), OpenAPI/Swagger.
@@ -33,7 +35,9 @@ the hard unknown — before building product polish.**
   for Phase 1. p95 generation < 5 s.
 
 ## Phase 1 — MVP (Vertical slice)
+
 **Fulfills ALL "M"-priority FRs (SRS §3); adds auth.**
+
 - Complete CRUD polish on users/plots/templates/profiles/projects (FR-1..4).
 - **Auth:** JWT login (password + email), tokens, guards — additive, replaces
   the placeholder `userId`; deactivation semantics enforced (FR-1.4).
@@ -48,7 +52,9 @@ the hard unknown — before building product polish.**
   without breaking existing endpoints.
 
 ## Phase 2 — Design Quality & Usability
+
 **Make layouts actually good, and iteration smarter (soft constraints).**
+
 - Scorer v2: orientation, daylight, kitchen-to-dining adjacency, ensuite rules,
   storage, garage, circulation width; weighted focus (FR soft prefs).
 - Smarter iteration: per-room delta solving, stability anchored to parent,
@@ -61,7 +67,9 @@ the hard unknown — before building product polish.**
   score breakdown on every layout.
 
 ## Phase 3 — Personalization (preference learning v1)
+
 **Make the product learn (SRS FR-8 captures; here it becomes adaptive).**
+
 - Feedback analysis: recurring dislike tags → suggested preference
   adjustments ("You ask to enlarge kitchens often → raise default kitchen").
 - Preference suggestion endpoint + explicit apply (user-in-the-loop, never
@@ -72,7 +80,9 @@ the hard unknown — before building product polish.**
   iterations-per-accepted-layout; privacy-safe data design reviewed.
 
 ## Phase 4 — Advanced Domain Constraints
+
 **Budget & partial/phase-wise development (scope creep guard).**
+
 - Budget: per-room/material cost model (rates table), cost estimate on layout,
   cost-aware constraint solver (prioritize phasing under budget).
 - Partial development: staged build plans (ground floor now, first floor later)
@@ -83,7 +93,9 @@ the hard unknown — before building product polish.**
   (additive only).
 
 ## Phase 5 — Scale & AI-assist
+
 **Unlock generative / smarter designs, scale the service.**
+
 - Evaluation harness to grade engine quality at volume (seed corpus).
 - AI-assisted variation: an LLM proposes concept arrays; the constraint engine
   validates & scores them via the SAME checker (trust boundary: AI never emits
@@ -97,21 +109,24 @@ the hard unknown — before building product polish.**
 ---
 
 ## Cross-cutting gates (every phase)
+
 - Contract stability: OpenAPI additive-only changes between releases; deprecation
   policy documented.
 - ADRs updated for new decisions; SRS/HLD/LLD stay in sync (AGENTS.md rule).
 - Security+secrets hygiene, observability, and test coverage maintained.
 
 ## Risk register (top items)
-| Risk | Mitigation |
-|---|---|
-| Engine quality never "good enough" | **Phase 0 is explicitly a feasibility gate**; accuracy checklist + human review before Phase 1; improve quality in Phase 2. |
-| Unrealistic user expectations (prefs impossible for plot) | Structured `UnsolvableLayout` diagnostics + hints from day 1 (FR-5.4). |
-| Scope creep (budget/rendering/auth too early) | Phasing above; budget & export wait for Phase 4; auth is Phase 1 only. |
-| Lock-in to a single engine strategy | `ILayoutGenerator` port; checker reused by any impl. |
-| Data/model churn as domain matures | Additive migrations + JSONB for fast-evolving shapes; version the `layout` schema json. |
+
+| Risk                                                      | Mitigation                                                                                                                  |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Engine quality never "good enough"                        | **Phase 0 is explicitly a feasibility gate**; accuracy checklist + human review before Phase 1; improve quality in Phase 2. |
+| Unrealistic user expectations (prefs impossible for plot) | Structured `UnsolvableLayout` diagnostics + hints from day 1 (FR-5.4).                                                      |
+| Scope creep (budget/rendering/auth too early)             | Phasing above; budget & export wait for Phase 4; auth is Phase 1 only.                                                      |
+| Lock-in to a single engine strategy                       | `ILayoutGenerator` port; checker reused by any impl.                                                                        |
+| Data/model churn as domain matures                        | Additive migrations + JSONB for fast-evolving shapes; version the `layout` schema json.                                     |
 
 ## Suggested first milestone (what to build next)
+
 Phase 0 prototype now (scaffold + engine + API slice), because the engine
 feasibility question gates everything else. The feedback loop (design → iterate
 → feedback) is the product's heart and Phase 1/2 builds on the Phase 0 verdict.

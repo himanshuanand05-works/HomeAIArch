@@ -5,6 +5,7 @@
 - **Supercedes:** n/a
 
 ## Context
+
 We are designing a greenfield backend to (a) manage users/plots/projects,
 (b) generate home layouts from structured preferences, (c) iterate on layouts via
 change requests, and (d) capture feedback for future learning. Two big unknowns:
@@ -13,6 +14,7 @@ scale (synchronous in-request generation vs async jobs). We must avoid
 premature distribution and premature AI, while leaving every escape hatch open.
 
 ## Decision
+
 1. **Single deployable** will be a **modular NestJS monolith** (feature modules:
    users, plots, preferences, projects, layout, feedback), not microservices.
 2. **Persistence:** PostgreSQL + Prisma (relational core, JSONB for layout
@@ -32,7 +34,9 @@ premature distribution and premature AI, while leaving every escape hatch open.
    Phase 5).
 
 ## Consequences
+
 **Good**
+
 - Fast iteration + simple operations: one service, one schema, one deploy.
 - Deterministic, testable engine; property tests possible on invariants.
 - Version tree + frozen inputs give full reproducibility and audit history.
@@ -40,6 +44,7 @@ premature distribution and premature AI, while leaving every escape hatch open.
 - REST v1 contract is additive-friendly; documented via OpenAPI from day 1.
 
 **Bad / trade-offs**
+
 - Monolith bound to a single runtime and single DB owner — fine at v1 scale.
 - Algorithmic engine quality will be limited early; we accepted that to prove the
   feedback loop first (Phase 1) and improve quality in Phase 2.
@@ -47,6 +52,7 @@ premature distribution and premature AI, while leaving every escape hatch open.
   within the latency budget, revisit if NFR-1 is violated repeatedly.
 
 ## References
+
 - SRS §2 (assumptions/constraints), FR-5, FR-6, NFR-5, NFR-9.
 - HLD D1–D9, §9, §12.
 - LLD §0, §3, §10 (future seams).

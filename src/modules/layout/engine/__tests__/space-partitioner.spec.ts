@@ -38,14 +38,10 @@ describe('space-partitioner', () => {
     const { levels, plan } = run(request, 42);
     const rooms = levels.flat();
     for (const room of rooms) {
-      expect(room.x).toBeGreaterThanOrEqual(plan.footprint.x - 1e-6);
-      expect(room.y).toBeGreaterThanOrEqual(plan.footprint.y - 1e-6);
-      expect(room.x + room.width).toBeLessThanOrEqual(
-        plan.footprint.x + plan.footprint.width + 1e-6,
-      );
-      expect(room.y + room.depth).toBeLessThanOrEqual(
-        plan.footprint.y + plan.footprint.depth + 1e-6,
-      );
+      expect(room.x).toBeGreaterThanOrEqual(plan.footprint.x - 1);
+      expect(room.y).toBeGreaterThanOrEqual(plan.footprint.y - 1);
+      expect(room.x + room.width).toBeLessThanOrEqual(plan.footprint.x + plan.footprint.width + 1);
+      expect(room.y + room.depth).toBeLessThanOrEqual(plan.footprint.y + plan.footprint.depth + 1);
     }
     for (let i = 0; i < rooms.length; i += 1) {
       for (let j = i + 1; j < rooms.length; j += 1) {
@@ -63,7 +59,7 @@ describe('space-partitioner', () => {
     expect(levels.length).toBe(request.floors);
     for (const level of levels) {
       for (const room of level) {
-        expect(room.x).toBeGreaterThanOrEqual(plan.stair!.rect.x + plan.stair!.rect.width - 1e-6);
+        expect(room.x).toBeGreaterThanOrEqual(plan.stair!.rect.x + plan.stair!.rect.width - 1);
       }
     }
     expect(stairRooms.length).toBe(request.floors);
@@ -86,7 +82,7 @@ describe('space-partitioner', () => {
     const kitchenArea = rooms
       .filter((room) => room.type === 'kitchen')
       .reduce((sum, room) => sum + areaOf(room), 0);
-    expect(bedroomArea).toBeGreaterThanOrEqual(13.4 + 10);
-    expect(kitchenArea).toBeGreaterThanOrEqual(7);
+    expect(bedroomArea).toBeGreaterThanOrEqual(13_400_000 + 10_000_000);
+    expect(kitchenArea).toBeGreaterThanOrEqual(7_000_000);
   });
 });

@@ -36,8 +36,8 @@ model Plot {
   id        String   @id @default(uuid())
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id])
-  widthM    Float
-  depthM    Float
+  widthMm   Int
+  depthMm   Int
   unit      PlotUnit @default(M)
   widthRaw  Float
   depthRaw  Float
@@ -46,7 +46,7 @@ model Plot {
   updatedAt DateTime @updatedAt
   projects  Project[]
 
-  @@unique([ownerId, widthM, depthM])
+  @@unique([ownerId, widthMm, depthMm])
   @@index([ownerId])
   @@map("plots")
 }
@@ -58,10 +58,10 @@ model DesignTemplate {
   region            String?
   version           Int      @default(1)
   isActive          Boolean  @default(true)
-  wallThicknessM    Float
+  wallThicknessMm   Int
   wallNote          String?
   circulationRatio  Float    @default(0.08)
-  doorWidthM        Float    @default(0.9)
+  doorWidthMm       Int      @default(900)
   staircase         Json
   roomDefaults      Json
   kitchenDefaults   Json

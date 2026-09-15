@@ -7,10 +7,10 @@ function appendConnection(
   from: string,
   to: string,
   kind: Connection['kind'],
-  width: number,
+  widthMm: number,
   counter: { value: number },
 ): void {
-  target.push({ id: `c${counter.value}`, from, to, kind, width });
+  target.push({ id: `c${counter.value}`, from, to, kind, widthMm });
   counter.value += 1;
 }
 
@@ -35,7 +35,7 @@ function findEntranceRoom(
     return null;
   }
   const touching = candidates
-    .filter((room) => Math.abs(room.y + room.depth - bottomY) < 1e-6)
+    .filter((room) => Math.abs(room.y + room.depth - bottomY) < 1)
     .sort((a, b) => b.width - a.width);
   if (touching.length > 0) {
     return touching[0].id;
@@ -82,7 +82,7 @@ function reachable(start: string, adjacency: Map<string, string[]>): Set<string>
 function ensureConnected(
   rooms: PlacedRoom[],
   initial: Connection[],
-  doorWidth: number,
+  doorWidthMm: number,
   counter: { value: number },
 ): Connection[] {
   const result = [...initial];
@@ -112,7 +112,7 @@ function ensureConnected(
         nearest = peer;
       }
     }
-    appendConnection(result, room.id, nearest.id, 'passage', doorWidth, counter);
+    appendConnection(result, room.id, nearest.id, 'passage', doorWidthMm, counter);
     guard += 1;
   }
   return result;
@@ -139,13 +139,13 @@ export function buildConnections(
     for (let i = 0; i < candidates.length; i += 1) {
       for (let j = i + 1; j < candidates.length; j += 1) {
         const overlap = contactLength(candidates[i], candidates[j]);
-        if (overlap >= req.doorWidthM) {
+        if (overlap >= req.doorWidthMm) {
           appendConnection(
             connections,
             candidates[i].id,
             candidates[j].id,
             'door',
-            Math.min(req.doorWidthM, overlap),
+            Math.min(req.doorWidthMm, overlap),
             counter,
           );
         }
@@ -157,14 +157,14 @@ export function buildConnections(
     const lower = stairRooms[f];
     const upper = stairRooms[f + 1];
     if (lower && upper) {
-      appendConnection(connections, lower.id, upper.id, 'stair', req.staircase.widthM, counter);
+      appendConnection(connections, lower.id, upper.id, 'stair', req.staircase.widthMm, counter);
     }
   }
 
   const entranceRoomId = findEntranceRoom(levels[0] ?? [], stairRooms[0], plan);
   if (entranceRoomId) {
-    appendConnection(connections, 'entrance', entranceRoomId, 'door', req.doorWidthM, counter);
+    appendConnection(connections, 'entrance', entranceRoomId, 'door', req.doorWidthMm, counter);
   }
 
-  return ensureConnected(allRooms, connections, req.doorWidthM, counter);
+  return ensureConnected(allRooms, connections, req.doorWidthMm, counter);
 }

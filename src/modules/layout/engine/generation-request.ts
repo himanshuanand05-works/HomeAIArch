@@ -3,17 +3,18 @@ import { Layout } from './model';
 export interface RoomSpec {
   type: string;
   count: number;
-  minM2: number;
-  idealM2: number;
-  maxM2: number;
+  minMm2: number;
+  idealMm2: number;
+  maxMm2: number;
+  minSideMm: number;
   extras?: Record<string, unknown>;
 }
 
 export interface KitchenSpec {
-  minM2: number;
-  idealM2: number;
-  maxM2: number;
-  counterMinM: number;
+  minMm2: number;
+  idealMm2: number;
+  maxMm2: number;
+  counterMinMm: number;
 }
 
 export interface BathConnectivitySpec {
@@ -33,16 +34,16 @@ export interface MandatorySpec {
 }
 
 export interface StairSpec {
-  widthM: number;
-  depthM: number;
+  widthMm: number;
+  depthMm: number;
 }
 
 export interface RoomOverride {
   type: string;
   roomId?: string;
-  minM2?: number;
-  idealM2?: number;
-  maxM2?: number;
+  minMm2?: number;
+  idealMm2?: number;
+  maxMm2?: number;
 }
 
 export interface ChangeRequest {
@@ -53,11 +54,11 @@ export interface ChangeRequest {
 }
 
 export interface GenerationRequest {
-  plot: { widthM: number; depthM: number };
+  plot: { widthMm: number; depthMm: number };
   openSides: number;
-  wallThicknessM: number;
+  wallThicknessMm: number;
   circulationRatio: number;
-  doorWidthM: number;
+  doorWidthMm: number;
   staircase: StairSpec;
   floors: number;
   rooms: RoomSpec[];
@@ -70,7 +71,7 @@ export interface GenerationRequest {
   changeRequest?: ChangeRequest;
 }
 
-export const DEFAULT_STAIR: StairSpec = { widthM: 1.0, depthM: 2.5 };
-export const DEFAULT_WALL_THICKNESS_M = 0.2286;
-export const DEFAULT_DOOR_WIDTH_M = 0.9;
+export const DEFAULT_STAIR: StairSpec = { widthMm: 1000, depthMm: 2500 };
+export const DEFAULT_WALL_THICKNESS_MM = 229;
+export const DEFAULT_DOOR_WIDTH_MM = 900;
 export const DEFAULT_CIRCULATION_RATIO = 0.08;

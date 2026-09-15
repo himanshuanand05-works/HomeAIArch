@@ -39,6 +39,7 @@ FloorPlan
 ├── furniture[]
 ├── structuralGrid
 ├── services
+├── requirements[]
 ├── constraints[]
 ├── objectives[]
 └── provenance
@@ -81,9 +82,11 @@ level.ground
 
 Agents should refer to IDs instead of natural-language names wherever possible.
 
-## 2.2 Units
+## 2.2 Units — mm only, integer
 
-The canonical internal unit should be **millimetres**.
+The **only** internal unit is **millimetres**, stored as **whole numbers**
+(integer mm). No metres, feet, or floating-point coordinates exist inside the
+canonical store.
 
 ```json
 {
@@ -92,37 +95,55 @@ The canonical internal unit should be **millimetres**.
 }
 ```
 
-The UI may display feet/inches or metres.
+All unit conversion happens exactly once at the edge — imperial or metric input
+is normalised to integer mm on ingestion; the UI converts back only for
+display.
 
 ```text
-Canonical: 3000 mm
-Display: 9' 10"
+Canonical: 3000 mm   (integer, stored)
+Display:   9' 10"    (UI only)
 ```
 
-This avoids floating-point and unit-conversion inconsistencies across agents.
+Using a single integer unit removes both classic failure modes: unit drift
+across agents and floating-point coordinate error accumulating over iterations.
+The Phase 0 backend emits integer mm (ADR-0005); the 0.5 m grid remains a
+rendering-time snap concern only (ADR-0004).
 
-## 2.3 Geometry Is Explicit
+## 2.3 Two stored geometries
 
 Do not store only:
 
 ```json
-{
-  "area": 120
-}
+{ "area": 120 }
 ```
 
-Store actual geometry:
+Every physical element stores **two** polygons, both in integer mm:
+
+- `externalGeometry` — the footprint bounded by the **outer wall faces**
+  (wall-to-wall). This is what **reasoning** uses: adjacency, connectivity
+  (shared faces), non-overlap (walls occupy physical space), containment inside
+  the construction envelope, plot coverage.
+- `internalGeometry` — the **occupiable** footprint inside the walls (painted
+  face to painted face, plaster excluded where it matters). This is what
+  **scoring** uses: usable area, furniture fit and clearance, circulation
+  width, area-efficiency.
 
 ```json
 {
-  "geometry": {
-    "type": "POLYGON",
-    "coordinates": [...]
-  }
+  "externalGeometry": { "type": "POLYGON", "coordinates": [...] },
+  "internalGeometry": { "type": "POLYGON", "coordinates": [...] }
 }
 ```
 
-Area should be derived and validated from geometry.
+The two are primaries and are stored together; neither is regenerated from the
+other. Everything else — centerline, wall thickness, plaster offset, aspect
+ratio, area, perimeter, centroid, bounding box — is **derived on demand**
+(§2.5). A dimension that does not state `external` or `internal` explicitly is
+ambiguous and must not enter the store.
+
+Wall-bounded elements (spaces, boundaries, circulation) carry both polygons;
+solid objects without a wall interior (furniture, structural columns, service
+shafts) carry a single `geometry` where internal == external by definition.
 
 ## 2.4 Hard vs Soft
 
@@ -138,19 +159,34 @@ Hard constraint violations invalidate a candidate.
 
 Soft constraint violations reduce its score.
 
+Soft constraints are **graded ranges, not bare weights**. A soft constraint is a
+predicate over `acceptable → preferred → undesirable` (bounds + falloff, e.g.
+"master ≥ 10 sq m (6 sq m acceptable, 8 sq m preferred)"), and it is **not an
+objective** — softening a constraint must never be used to chase a global
+optimum like "maximize master area" (Plan.md §3.1).
+
 ## 2.5 Derived Properties
 
-Prefer storing source geometry and deriving:
+All of the following are derived from the two stored polygons (`externalGeometry`
++ `internalGeometry`) and are never stored independently:
 
-- area
+- area (external and internal)
 - perimeter
 - centroid
 - bounding box
+- centerline (average of external / internal)
+- wall thickness (external minus internal offset)
+- aspect ratio
 - adjacency
-- room dimensions
 - circulation distance
 
 This prevents inconsistent state.
+
+## 2.6 Area units
+
+Area is expressed in **square millimetres** (mm²) as an integer derived from the
+stored polygon coordinates. For display it is shown in m²; the internal value is
+always mm².
 
 ---
 
@@ -158,8 +194,9 @@ This prevents inconsistent state.
 
 ```typescript
 type ID = string;
-type Millimetres = number;
+type Millimetres = number;   // always an integer (§2.2)
 type Degrees = number;
+type MillimetresSquared = number; // always an integer (§2.6)
 
 type Point = {
   x: Millimetres;
@@ -168,7 +205,7 @@ type Point = {
 
 type Polygon = {
   type: "POLYGON";
-  coordinates: Point[];
+  coordinates: Point[];  // integer mm (§2.2)
 };
 
 type LineString = {
@@ -224,6 +261,8 @@ interface FloorPlan {
   constraints: Constraint[];
 
   objectives: Objective[];
+
+  requirements: Requirement[];
 
   provenance: Provenance;
 }
@@ -426,7 +465,9 @@ interface Space {
 
   zoneId?: ID;
 
-  geometry: Polygon;
+  externalGeometry: Polygon;
+
+  internalGeometry: Polygon;
 
   requirements?: SpaceRequirements;
 
@@ -446,9 +487,9 @@ interface Space {
 
 ```typescript
 interface SpaceRequirements {
-  minArea?: number;
-  targetArea?: number;
-  maxArea?: number;
+  minArea?: number;     // mm² (§2.6)
+  targetArea?: number;  // mm²
+  maxArea?: number;     // mm²
 
   minWidth?: Millimetres;
   minLength?: Millimetres;
@@ -464,8 +505,17 @@ interface SpaceRequirements {
   accessibilityRequired?: boolean;
 
   privacyLevel?: "LOW" | "MEDIUM" | "HIGH";
+
+  confidence?: number;
+
+  needsClarification?: boolean;
 }
 ```
+
+`minArea/targetArea/maxArea` encode the interpreted range
+`{minimum, preferred, maximum}` (Plan.md §3.1). Do not freeze "Reasonably large
+bedroom" silently into a bare `MIN_AREA`; retain the source requirement,
+uncertainty, and `needsClarification` (see §32 Requirement Model).
 
 ---
 
@@ -593,7 +643,9 @@ interface CirculationElement {
 
   levelId: ID;
 
-  geometry: Polygon | LineString;
+  externalGeometry: Polygon;
+
+  internalGeometry: Polygon;
 
   width?: Millimetres;
 
@@ -780,7 +832,7 @@ interface GeometricConstraint {
 
   entities: ID[];
 
-  value?: number | string;
+  value?: number | string;   // mm for dimensions, mm² for area (§2.6)
 
   hard: boolean;
 
@@ -1058,6 +1110,20 @@ EXPORTABLE
 
 A candidate should never reach `EXPORTABLE` while hard constraints remain unresolved.
 
+The DSL state machine is computational; Plan.md §3.4 describes the
+**user-facing design-maturity ladder** (CONCEPT → TOPOLOGY → SCHEMATIC →
+GEOMETRIC → DETAILED → VALIDATED → APPROVED). The two are aligned as follows:
+
+| Maturity stage | DSL state(s)                     |
+| -------------- | -------------------------------- |
+| CONCEPT        | DRAFT                            |
+| TOPOLOGY       | TOPOLOGY_VALID                   |
+| SCHEMATIC      | GEOMETRY_GENERATED               |
+| GEOMETRIC      | GEOMETRY_VALID                   |
+| DETAILED       | REGULATORY_VALID                 |
+| VALIDATED      | OPTIMIZED                        |
+| APPROVED       | USER_APPROVED                    |
+
 ---
 
 # 28. Agent Interaction Contract
@@ -1084,7 +1150,13 @@ interface LayoutOperation {
 
   targetId?: ID;
 
+  parentVersion?: ID;
+
   parameters: Record<string, unknown>;
+
+  preconditions?: string[];
+
+  expectedEffects?: string[];
 
   reason: string;
 }
@@ -1289,7 +1361,7 @@ This is critical for preventing agents from corrupting the spatial state.
       "entities": [
         "space.master"
       ],
-      "value": 120,
+      "value": 120000000,
       "hard": true
     }
   ],
@@ -1367,7 +1439,170 @@ The **DSL is the anti-corruption layer** between probabilistic AI reasoning and 
 
 ---
 
-# 32. Most Important Invariant
+# 32. Requirement Model
+
+The DSL models **requirements above constraints** so the system can answer
+"why is this constraint here?" and keep uncertainty visible (Plan.md §3.1).
+A constraint never exists without a requirement that derived it.
+
+```typescript
+type RequirementStatus =
+  | "UNRESOLVED"
+  | "ACCEPTED"
+  | "NEGOTIATED"
+  | "REJECTED";
+
+interface InterpretedRange {
+  minimum?: number;
+  preferred?: number;
+  maximum?: number;
+}
+
+interface Requirement {
+  id: ID;
+
+  source: "USER" | "ARCHITECT" | "INFERRED" | "REGULATION";
+
+  statement: string;
+
+  priority: "MANDATORY" | "HIGH" | "MEDIUM" | "LOW";
+
+  status: RequirementStatus;
+
+  interpretedRange?: InterpretedRange;
+
+  confidence?: number;
+
+  needsClarification?: boolean;
+
+  derivedConstraints: ID[];
+
+  provenance: EntityProvenance;
+}
+```
+
+`Requirement.derivedConstraints` is the traceability link into the constraint
+graph. `interpretedRange` keeps soft-constraint flexibility explicit; a vague
+"Reasonably large bedroom" must surface via `needsClarification` instead of
+being silently frozen into a hard `MIN_AREA`.
+
+---
+
+# 33. Constraint Dependency Graph
+
+Constraints are related, not isolated (Plan.md §3.6). A dependency edge tells
+the system which constraints can disrupt each other when one changes.
+
+```typescript
+type ConstraintDependency =
+  | "REQUIRES"
+  | "CONFLICTS_WITH"
+  | "AFFECTS"
+  | "DERIVED_FROM";
+
+interface ConstraintEdge {
+  id: ID;
+
+  sourceConstraintId: ID;
+
+  relationship: ConstraintDependency;
+
+  targetConstraintId: ID;
+
+  rationale?: string;
+}
+```
+
+- `REQUIRES` — "bedroom needs a window" → wall must be exterior → must respect
+  setbacks (a chain).
+- `CONFLICTS_WITH` — "4 bedrooms + 2-car parking + 120 sq ft living" on a small
+  plot.
+- `AFFECTS` — one constraint's value changes another's (raising master area low
+  space for the kitchen).
+- `DERIVED_FROM` — constraint originates from the same user requirement
+  (links to §32).
+
+Plan the constraint store as a **DAG plus conflict edges**, so unsat-core
+extraction over it can attribute failure to the original requirements.
+
+---
+
+# 34. Feasibility Analysis / Unsat Reasoning
+
+`ValidationResult` reports *what* failed; feasibility analysis reports *why* and
+*how to relax* (Plan.md §3.6) — never a bare "NO SOLUTION".
+
+```typescript
+interface FeasibilityAnalysis {
+  feasible: boolean;
+
+  conflictingRequirements: ID[];
+
+  conflictingConstraints: ID[];
+
+  explanation: string;
+
+  relaxationOptions: RelaxationOption[];
+}
+
+interface RelaxationOption {
+  constraintId: ID;
+
+  proposal: string;
+
+  impact?: string;
+}
+```
+
+Example:
+
+```text
+conflictingRequirements: [req.four_bedrooms, req.two_car_parking, req.living_120sqft]
+conflictingConstraints:  [geo.usable_area_min, geo.covered_area_max]
+explanation:             "required usable area 412 m² exceeds plot capacity 340 m²"
+relaxationOptions: [
+  { constraintId: "geo.living_area_min", proposal: "reduce living to 90 sq ft"  },
+  { constraintId: "geo.cost_area",       proposal: "park outside the footprint" },
+  { constraintId: "req.four_bedrooms",   proposal: "drop to three bedrooms"     },
+  { constraintId: "req.plot_coverage",   proposal: "add one floor"              }
+]
+```
+
+This analysis is derived from the constraint dependency graph (§33) plus the
+requirement model (§32), by deterministic reasoning.
+
+---
+
+# 35. Multi-Level Vertical Semantics
+
+Level relationships exist beyond `ABOVE/BELOW` (see §7, §18):
+
+- **Staircase chain** — `STAIRCASE` elements connect consecutive levels with a
+  joint total reading (STAIR.connecting = [level.ground, level.first]); the
+  chain must be continuous: `[L0,L1]`, `[L1,L2]`, never `[L0,L2]` without `[L0,L1]`.
+- **Wet-area stacking** — baths / toilets / kitchens with a shared plumbing
+  shaft are preferred `ALIGNED_WITH` across floors (Plan.md §3.3). Represented
+  as `TopologicalConstraint` with `relation: "ALIGNED_WITH"` and an
+  `objectives` entry of `PLUMBING_EFFICIENCY`.
+
+---
+
+# 36. Versioning & Branching
+
+Immutable-version semantics (Plan.md §6, AGENTS §3):
+
+- The user's plan is a chain of **immutable versions**; never mutate in place.
+- Agents read a **pinned version** (`parentVersion` on `LayoutOperation`, §28)
+  and produce a candidate (`LayoutCandidate.basePlanId`).
+- Only an explicit `COMMIT` (validated candidate, §29) creates a child version;
+  anything else is discarded. Undo/rollback/audit/agent-attribution fall out of
+  this model.
+- Plans may branch: a `LayoutCandidate` with no commit is a branch; merging
+  back is a new `COMMIT` child.
+
+---
+
+# 37. Most Important Invariant
 
 The system should enforce:
 

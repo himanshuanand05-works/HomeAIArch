@@ -6,6 +6,7 @@
 - **In response to:** owner answers to open decisions 3-6 (AGENTS.md §8)
 
 ## Context
+
 We need region-familiar defaults (the product asked for standards people actually
 follow: 9" brick walls, master bedroom ≥ 12×12 ft, kitchen counter ≥ 10 ft) and a
 way to structure "mandatory requirements" (plot open sides, attached bathrooms,
@@ -14,6 +15,7 @@ explicit choice when starting a project. Without this, defaults would be
 amorphous and the generator could not honor hard product constraints.
 
 ## Decision
+
 1. Ship **`DesignTemplate`** rows (seeded, versioned, region-tagged) that bundle
    dimensional standards: wall thickness (e.g., 0.2286 m for 9" brick), room
    defaults per type, kitchen counter length, staircase, circulation ratio, door
@@ -30,7 +32,9 @@ amorphous and the generator could not honor hard product constraints.
    mandatory requirements for generator consumption at project scope.
 
 ## Consequences
+
 **Good**
+
 - Dimensional reality (wall bands), realistic constraints, and reproducible
   defaults out of the box.
 - Feasibility prototype (Phase 0) gets its accuracy checklist targets directly
@@ -40,6 +44,7 @@ amorphous and the generator could not honor hard product constraints.
 - Explicit profile selection preserves determinism and avoids "silent default".
 
 **Bad / trade-offs**
+
 - Template curation is content work; v1 seeds only one or two region presets.
 - Snapshotting duplicates data (project carries expanded profile JSON) — accepted
   for immutability guarantees.
@@ -47,6 +52,7 @@ amorphous and the generator could not honor hard product constraints.
   — deferred details to LLD §3.2.
 
 ## References
+
 - SRS FR-3, FR-4, FR-5, §1.4 glossary.
 - HLD D4b, D10, §8 storage design.
 - LLD §2 schema, §3.2 algorithm.

@@ -22,7 +22,7 @@ describe('constraint-checker', () => {
   });
 
   it('throws UnsolvableLayoutError when the plot cannot hold rooms', () => {
-    expect(() => outcomeOf(sampleRequest({ plot: { widthM: 3, depthM: 3 } }), 1)).toThrow(
+    expect(() => outcomeOf(sampleRequest({ plot: { widthMm: 3000, depthMm: 3000 } }), 1)).toThrow(
       UnsolvableLayoutError,
     );
   });
@@ -31,17 +31,17 @@ describe('constraint-checker', () => {
     const request = sampleRequest({ floors: 1 });
     const plan = buildPlan(request);
     const outOfBounds = {
-      x: -5,
-      y: -5,
-      width: 2,
-      depth: 2,
+      x: -5000,
+      y: -5000,
+      width: 2000,
+      depth: 2000,
       id: 'living_f0_0',
       type: 'living',
       label: 'Living Room',
       level: 0,
       planIndex: 0,
-      areaTargetM2: 4,
-      minSideM: 2,
+      areaTargetMm2: 4_000_000,
+      minSideMm: 2000,
     };
     const outcome = checkLayout(request, plan, [[outOfBounds]], [], []);
     expect(outcome.violations.some((v) => v.constraint === 'IN_BOUNDS')).toBe(true);

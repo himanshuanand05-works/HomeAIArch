@@ -41,8 +41,8 @@ export class ProjectsService {
     }
 
     const plotSnapshot: PlotSnapshot = {
-      widthM: plot.widthM,
-      depthM: plot.depthM,
+      widthMm: plot.widthMm,
+      depthMm: plot.depthMm,
       widthRaw: plot.widthRaw,
       depthRaw: plot.depthRaw,
       unit: plot.unit,
@@ -56,7 +56,7 @@ export class ProjectsService {
         ownerId: dto.ownerId,
         plotId: plot.id,
         homeProfileId: profile.id,
-        name: dto.name ?? `${plot.widthM}x${plot.depthM}m home`,
+        name: dto.name ?? `${plot.widthRaw}x${plot.depthRaw} ${plot.unit} home`,
         plotSnapshot: plotSnapshot as unknown as Prisma.InputJsonValue,
         prefsSnapshot: prefsSnapshot as unknown as Prisma.InputJsonValue,
       },

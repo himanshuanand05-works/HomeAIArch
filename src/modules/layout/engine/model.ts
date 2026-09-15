@@ -13,15 +13,21 @@ export type ConnectionKind = 'door' | 'passage' | 'stair';
 export interface RoomProps {
   ensuiteBathId?: string | null;
   parkingCars?: number;
-  counterMinM?: number;
+  counterMinMm?: number;
 }
 
-export interface Room extends Rect {
+export interface Room {
   roomId: string;
   type: string;
   label: string;
   level: number;
-  areaM2: number;
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+  externalGeometry: Rect;
+  internalGeometry: Rect;
+  areaMm2: number;
   props?: RoomProps;
 }
 
@@ -36,12 +42,12 @@ export interface Connection {
   from: string;
   to: string;
   kind: ConnectionKind;
-  width: number;
+  widthMm: number;
 }
 
 export interface PlotGeom {
-  width: number;
-  depth: number;
+  widthMm: number;
+  depthMm: number;
   openSides: number;
 }
 
@@ -50,19 +56,19 @@ export interface ScoreBreakdown {
 }
 
 export interface LayoutMetrics {
-  builtUpAreaM2: number;
-  roomAreaM2: number;
+  builtUpAreaMm2: number;
+  roomAreaMm2: number;
   plotCoverage: number;
-  circulationM2: number;
+  circulationMm2: number;
   score: number;
   scoreBreakdown: ScoreBreakdown;
 }
 
 export interface Layout {
   schemaVersion: number;
-  unit: 'meters';
-  resolution: number;
-  wallThicknessM: number;
+  unit: 'mm';
+  resolutionMm: number;
+  wallThicknessMm: number;
   plot: PlotGeom;
   floors: Floor[];
   connections: Connection[];
@@ -73,7 +79,7 @@ export function areaOf(rect: Rect): number {
   return rect.width * rect.depth;
 }
 
-export function rectsOverlap(a: Rect, b: Rect, tolerance = 0.01): boolean {
+export function rectsOverlap(a: Rect, b: Rect, tolerance = 1): boolean {
   return (
     a.x < b.x + b.width - tolerance &&
     b.x < a.x + a.width - tolerance &&
@@ -83,10 +89,8 @@ export function rectsOverlap(a: Rect, b: Rect, tolerance = 0.01): boolean {
 }
 
 export function contactLength(a: Rect, b: Rect): number {
-  const horizontalTouching =
-    Math.abs(a.x + a.width - b.x) < 0.01 || Math.abs(b.x + b.width - a.x) < 0.01;
-  const verticalTouching =
-    Math.abs(a.y + a.depth - b.y) < 0.01 || Math.abs(b.y + b.depth - a.y) < 0.01;
+  const horizontalTouching = Math.abs(a.x + a.width - b.x) < 1 || Math.abs(b.x + b.width - a.x) < 1;
+  const verticalTouching = Math.abs(a.y + a.depth - b.y) < 1 || Math.abs(b.y + b.depth - a.y) < 1;
 
   if (horizontalTouching) {
     const overlap = Math.min(a.y + a.depth, b.y + b.depth) - Math.max(a.y, b.y);

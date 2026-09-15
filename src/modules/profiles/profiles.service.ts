@@ -2,8 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ResourceNotFoundError } from '../../common/errors/domain-errors';
-import { PrefsService, TemplateSnapshot, PrefsSnapshot } from '../prefs/prefs.service';
-import { CreateProfileDto, MandatoryDto } from './dto/create-profile.dto';
+import { metresToMillimetres } from '../../common/util/units';
+import { PrefsService, TemplateSnapshot, PrefsSnapshot, PrefsInput } from '../prefs/prefs.service';
+import {
+  CreateProfileDto,
+  MandatoryDto,
+  ProfileRoomDto,
+  KitchenDto,
+} from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { MandatoryRequirements } from '../prefs/prefs.service';
 
@@ -21,6 +27,30 @@ function toMandatoryPartial(
     outdoorParking: dto.outdoorParking
       ? { required: dto.outdoorParking.required ?? false, cars: dto.outdoorParking.cars ?? 0 }
       : undefined,
+  };
+}
+
+function toRoomInputs(rooms: ProfileRoomDto[]): PrefsInput['rooms'] {
+  return rooms.map((room) => ({
+    type: room.type,
+    count: room.count ?? 1,
+    minM2: room.minM2,
+    idealM2: room.idealM2,
+    maxM2: room.maxM2,
+    minSideMm: room.minSideM !== undefined ? metresToMillimetres(room.minSideM) : undefined,
+  }));
+}
+
+function toKitchenInput(kitchen: KitchenDto | undefined): PrefsInput['kitchen'] {
+  if (!kitchen) {
+    return undefined;
+  }
+  return {
+    minM2: kitchen.minM2,
+    idealM2: kitchen.idealM2,
+    maxM2: kitchen.maxM2,
+    counterMinMm:
+      kitchen.counterMinM !== undefined ? metresToMillimetres(kitchen.counterMinM) : undefined,
   };
 }
 
@@ -59,9 +89,9 @@ export class ProfilesService {
       name: template.name,
       region: template.region,
       wallNote: template.wallNote,
-      wallThicknessM: template.wallThicknessM,
+      wallThicknessMm: template.wallThicknessMm,
       circulationRatio: template.circulationRatio,
-      doorWidthM: template.doorWidthM,
+      doorWidthMm: template.doorWidthMm,
       staircase: template.staircase,
       roomDefaults: template.roomDefaults,
       kitchenDefaults: template.kitchenDefaults,
@@ -71,24 +101,8 @@ export class ProfilesService {
 
     const snapshot = this.prefs.buildPrefsSnapshot(templateSnapshot, {
       floors: dto.floors ?? 1,
-      rooms: (
-        dto.rooms as {
-          type: string;
-          count?: number;
-          minM2?: number;
-          idealM2?: number;
-          maxM2?: number;
-          minSideM?: number;
-        }[]
-      ).map((room) => ({
-        type: room.type,
-        count: room.count ?? 1,
-        minM2: room.minM2,
-        idealM2: room.idealM2,
-        maxM2: room.maxM2,
-        minSideM: room.minSideM,
-      })),
-      kitchen: dto.kitchen as Parameters<PrefsService['buildPrefsSnapshot']>[1]['kitchen'],
+      rooms: toRoomInputs(dto.rooms),
+      kitchen: toKitchenInput(dto.kitchen),
       bathConnectivity: dto.bathConnectivity,
       mandatory: toMandatoryPartial(dto.mandatory),
       maxCoverage: dto.maxCoverage ?? null,
@@ -140,13 +154,8 @@ export class ProfilesService {
 
     const snapshot = this.prefs.buildPrefsSnapshot(templateSnapshot, {
       floors: dto.floors ?? existing.floors,
-      rooms: dto.rooms
-        ? (dto.rooms as { type: string; count?: number }[]).map((room) => ({
-            type: room.type,
-            count: room.count ?? 1,
-          }))
-        : previous.rooms,
-      kitchen: dto.kitchen ?? previous.kitchen,
+      rooms: dto.rooms ? toRoomInputs(dto.rooms) : previous.rooms,
+      kitchen: dto.kitchen ? toKitchenInput(dto.kitchen) : previous.kitchen,
       bathConnectivity: dto.bathConnectivity ?? previous.bathConnectivity,
       mandatory: toMandatoryPartial(dto.mandatory) ?? previous.mandatory,
       maxCoverage: dto.maxCoverage !== undefined ? dto.maxCoverage : previous.maxCoverage,

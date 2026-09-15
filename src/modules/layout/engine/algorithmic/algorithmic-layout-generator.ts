@@ -34,9 +34,9 @@ export function applyChangeRequest(request: GenerationRequest): GenerationReques
       }
       return {
         ...room,
-        minM2: override.minM2 ?? room.minM2,
-        idealM2: override.idealM2 ?? room.idealM2,
-        maxM2: override.maxM2 ?? room.maxM2,
+        minMm2: override.minMm2 ?? room.minMm2,
+        idealMm2: override.idealMm2 ?? room.idealMm2,
+        maxMm2: override.maxMm2 ?? room.maxMm2,
       };
     });
   }

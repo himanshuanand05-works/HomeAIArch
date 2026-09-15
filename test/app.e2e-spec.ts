@@ -62,7 +62,7 @@ describe('API flow (user -> plot -> template -> profile -> project -> design -> 
         error instanceof Error ? error.message : '',
       );
     }
-  });
+  }, 60_000);
 
   afterAll(async () => {
     await app?.close();
@@ -95,7 +95,8 @@ describe('API flow (user -> plot -> template -> profile -> project -> design -> 
       .send({ ownerId: userId, width: 40, depth: 60, unit: 'FT', openSides: 3 })
       .expect(201);
     const plotId = plot.body.id;
-    expect(plot.body.widthM).toBeCloseTo(40 * 0.3048, 2);
+    expect(plot.body.widthMm).toBe(12192); // 40 ft = 12192 mm
+    expect(plot.body.depthMm).toBe(18288); // 60 ft = 18288 mm
 
     const profile = await request(server)
       .post('/api/v1/profiles')
@@ -115,7 +116,7 @@ describe('API flow (user -> plot -> template -> profile -> project -> design -> 
       })
       .expect(201);
     const profileId = profile.body.id;
-    expect(profile.body.templateSnapshot.wallThicknessM).toBeGreaterThan(0);
+    expect(profile.body.templateSnapshot.wallThicknessMm).toBeGreaterThan(0);
 
     const project = await request(server)
       .post('/api/v1/projects')
@@ -129,10 +130,17 @@ describe('API flow (user -> plot -> template -> profile -> project -> design -> 
       .send({ seed: 123 })
       .expect(201);
     expect(design.body.versionNumber).toBe(1);
+    expect(design.body.layout.unit).toBe('mm');
+    expect(design.body.layout.wallThicknessMm).toBeGreaterThan(0);
     expect(design.body.layout.floors).toHaveLength(2);
     expect(design.body.layout.metrics.score).toBeGreaterThan(0);
     for (const floor of design.body.layout.floors) {
       expect(floor.rooms.length).toBeGreaterThan(0);
+      for (const room of floor.rooms) {
+        expect(room.externalGeometry).toBeDefined();
+        expect(room.internalGeometry).toBeDefined();
+        expect(room.areaMm2).toBeGreaterThan(0);
+      }
     }
 
     const list = await request(server).get(`/api/v1/projects/${projectId}/designs`).expect(200);
