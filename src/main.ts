@@ -32,6 +32,13 @@ async function bootstrap(): Promise<void> {
     .setTitle('HomeAIArch API')
     .setDescription('Automated home layout design backend (Phase 0 prototype)')
     .setVersion('0.1.0')
+    .addTag('health', 'Liveness and readiness probes')
+    .addTag('users', 'User identity (placeholder userId in Phase 0)')
+    .addTag('plots', 'Plot dimensions and open-side counts')
+    .addTag('templates', 'Regional DesignTemplates (seeded standards)')
+    .addTag('profiles', 'Home profiles — preferences frozen at creation from a template')
+    .addTag('projects', 'Projects binding a plot + profile, and CRUD')
+    .addTag('layout', 'Design generation, iteration, and feedback')
     .build();
   const document = SwaggerModule.createDocument(app, openApi);
   SwaggerModule.setup('docs', app, document);

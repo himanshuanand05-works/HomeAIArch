@@ -51,6 +51,57 @@ npm run start:dev     # watch mode on http://localhost:3000
 
 Health (outside the `/api/v1` prefix): `GET /health` and `GET /health/ready`.
 
+## Swagger / OpenAPI
+
+The API is self-documented. With the app running:
+
+| Resource     | URL                               |
+| ------------ | --------------------------------- |
+| Swagger UI   | `http://localhost:3000/docs`      |
+| OpenAPI JSON | `http://localhost:3000/docs-json` |
+| OpenAPI YAML | `http://localhost:3000/docs-yaml` |
+
+Schemas are introspected from the controllers and DTOs via the
+`@nestjs/swagger` compiler plugin, so every request/response shape, enum,
+default, and required field is shown — use **Try it out** in the UI to run the
+flow below without writing any client code. Both the UI and the JSON/YAML
+documents live outside the `/api/v1` prefix.
+
+## End-to-end flow (recommended call order)
+
+The calls are **chained**: each step returns an id you must pass into the next
+one. This is the full **design → change → redesign** feedback loop that the
+product is built around. `npm run test:e2e` automates exactly this sequence.
+
+| Step | Call                                                            | Body (key fields)                                                                                                          | Reuse from response (value to forward) |
+| ---- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 1    | `GET /api/v1/templates`                                         | —                                                                                                                          | `templateId` ← `[0].id`                |
+| 2    | `POST /api/v1/users`                                            | `{ "email", "name" }`                                                                                                      | `userId` ← `id`                        |
+| 3    | `POST /api/v1/plots`                                            | `{ "ownerId", "width": 40, "depth": 60, "unit": "FT", "openSides": 3 }`                                                    | `plotId` ← `id`                        |
+| 4    | `POST /api/v1/profiles`                                         | `{ "userId", "name", "templateId", "floors": 2, "rooms": [{ "type": "living" }, ...], "kitchen": { "counterMinM": 3.2 } }` | `homeProfileId` ← `id`                 |
+| 5    | `POST /api/v1/projects`                                         | `{ "ownerId", "plotId", "homeProfileId", "name" }`                                                                         | `projectId` ← `id`                     |
+| 6    | `POST /api/v1/projects/:projectId/designs`                      | `{ "seed": 123 }`                                                                                                          | `designId` ← `id` (initial layout)     |
+| 7    | `POST /api/v1/projects/:projectId/designs/:designId/iterations` | `{ "changeRequest": { "removeTypes": ["dining"] }, "seed": 123 }`                                                          | child layout (version 2)               |
+| 8    | `GET /api/v1/projects/:projectId/designs`                       | —                                                                                                                          | version history                        |
+
+Steps 6→7 are repeatable: every iteration branches a new version off the parent
+while the parent stays immutable, so you can keep refining (enlarge/shrink
+rooms, add/remove types, move rooms) until the layout is accepted — then record
+feedback (Phase 1) so future designs improve.
+
+Detailed request/response bodies for each endpoint are in Swagger (`/docs`) and
+`docs/LLD.md` §5.
+
+Change-requests and feedback are **structured, not free-text**: store shapes are
+stable and machine-readable so future preference-learning needs no NLP
+(`docs/LLD.md` §4, `src/modules/prefs/schemas.ts`).
+
+The design payload returns a layout with `unit: 'mm'`, per-floor rooms with
+`externalGeometry`/`internalGeometry`/`areaMm2`, wall `connections`, and
+`metrics` (built-up / room / circulation area in mm², plot coverage, score).
+Geometrically unsolvable inputs fail with an `UnsolvableLayout` error carrying
+reasons + hints — never a half-valid layout (FR-5.4).
+
 ## Verify
 
 ```powershell
@@ -72,37 +123,6 @@ npm run test:e2e    # full API happy path (needs a seeded DB)
 - Generation is deterministic: same inputs + same `seed` → same layout. Pass
   `seed` in the designs/iterations bodies to reproduce a layout; without it the
   engine uses a deterministic default.
-
-## API quick tour
-
-All under `/api/v1` (see `docs/LLD.md` §5 for the full table).
-
-1. **Templates** — regional defaults:
-   `GET /api/v1/templates`
-2. **Users** — placeholder identity:
-   `POST /api/v1/users { "email", "name" }`
-3. **Plots** — your land:
-   `POST /api/v1/plots { "ownerId", "width": 40, "depth": 60, "unit": "FT", "openSides": 3 }`
-4. **Profiles** — preferences frozen from a template at creation (FR-4.1):
-   `POST /api/v1/profiles { "userId", "name", "templateId", "floors": 2, "rooms": [{ "type": "living", "count": 1 }, ...], "kitchen": { "counterMinM": 3.2 } }`
-5. **Projects** — bind a plot + profile:
-   `POST /api/v1/projects { "ownerId", "plotId", "homeProfileId", "name" }`
-6. **Designs** — v1 layout:
-   `POST /api/v1/projects/:projectId/designs { "seed": 123 }`
-7. **Iterate** — branch a child version from a change-request (parent immutable):
-   `POST /api/v1/projects/:projectId/designs/1/iterations { "changeRequest": { "removeTypes": ["dining"] }, "seed": 123 }`
-8. **History** — `GET /api/v1/projects/:projectId/designs` and
-   `GET /api/v1/projects/:projectId/designs/:designId`
-
-Change-requests and feedback are **structured, not free-text**: store shapes are
-stable and machine-readable so future preference-learning needs no NLP
-(`docs/LLD.md` §4, `src/modules/prefs/schemas.ts`).
-
-The design payload returns a layout with `unit: 'mm'`, per-floor rooms with
-`externalGeometry`/`internalGeometry`/`areaMm2`, wall `connections`, and
-`metrics` (built-up / room / circulation area in mm², plot coverage, score).
-Geometrically unsolvable inputs fail with an `UnsolvableLayout` error carrying
-reasons + hints — never a half-valid layout (FR-5.4).
 
 ## Docs
 
