@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: homeaiarch-db
+    environment:
+      POSTGRES_USER: homeai
+      POSTGRES_PASSWORD: homeai
+      POSTGRES_DB: homeaiarch
+    ports:
+      - '5432:5432'
+    volumes:
+      - homeaiarch-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U homeai -d homeaiarch']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  homeaiarch-pgdata:
