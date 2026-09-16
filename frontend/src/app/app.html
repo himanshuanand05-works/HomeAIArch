@@ -1,0 +1,23 @@
+<header class="shell">
+  <a class="brand" routerLink="/">
+    <span class="brand-mark">⌂</span>
+    <span class="brand-name">HomeAIArch Studio</span>
+    <span class="brand-tag">Phase 0 · feasibility</span>
+  </a>
+  <nav class="nav">
+    <a routerLink="/templates" routerLinkActive="active">Templates</a>
+    <a routerLink="/plots" routerLinkActive="active">Plots</a>
+    <a routerLink="/profiles" routerLinkActive="active">Profiles</a>
+    <a routerLink="/projects" routerLinkActive="active">Projects</a>
+  </nav>
+  <app-session-bar />
+</header>
+
+<main class="shell-body">
+  <router-outlet />
+</main>
+
+<footer class="shell-foot">
+  <span>HomeAIArch Studio — deterministic home layout design</span>
+  <span class="mono">integer mm · seed-reproducible · design → change → redesign</span>
+</footer>
